@@ -5,11 +5,13 @@ export default async function handler(req, res) {
   cors(res)
   if (req.method === 'OPTIONS') return res.status(204).end()
   try {
-    // TODO: replace with your real upstream(s)
-    // Example: NewsCatcher/Bing/RSS aggregator endpoint you control
-    const data = await upstreamJson('https://example.com/upstream/top', {
-      'x-api-key': process.env.NEWS_API_KEY || '',
-    })
+    // NewsAPI.org Top Headlines for Pakistan
+    const data = await upstreamJson(
+      'https://newsapi.org/v2/top-headlines?country=pk&pageSize=50',
+      {
+        'X-Api-Key': process.env.NEWSAPI_ORG || '',
+      }
+    )
     const items = Array.isArray(data?.articles)
       ? data.articles
       : Array.isArray(data?.items)

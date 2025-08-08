@@ -6,9 +6,21 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(204).end()
   const { slug } = req.query
   try {
-    // TODO: replace with your real upstream(s)
-    const url = `https://example.com/upstream/category?slug=${encodeURIComponent(slug)}`
-    const data = await upstreamJson(url, { 'x-api-key': process.env.NEWS_API_KEY || '' })
+    // NewsAPI.org by category
+    const allowed = [
+      'business',
+      'entertainment',
+      'general',
+      'health',
+      'science',
+      'sports',
+      'technology',
+    ]
+    const cat = allowed.includes(String(slug)) ? String(slug) : 'general'
+    const url = `https://newsapi.org/v2/top-headlines?country=pk&category=${encodeURIComponent(
+      cat
+    )}&pageSize=50`
+    const data = await upstreamJson(url, { 'X-Api-Key': process.env.NEWSAPI_ORG || '' })
     const items = Array.isArray(data?.articles)
       ? data.articles
       : Array.isArray(data?.items)

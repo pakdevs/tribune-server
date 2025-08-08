@@ -14,8 +14,11 @@ All responses: `{ items: Article[] }` where each Article is normalized for the a
 
 1. Create a project on Vercel and link this `vercel-proxy` folder.
 2. Add environment variables in Project Settings → Environment Variables:
-   - `NEWS_API_KEY` (and any other upstream keys)
-3. Replace the example upstream URLs in `api/top.js`, `api/category/[slug].js`, and `api/search.js` with your real providers (APIs or your own RSS aggregator).
+   - `NEWSAPI_ORG` (your NewsAPI.org API key)
+3. Upstreams:
+   - `api/top.js` uses NewsAPI.org Top Headlines for Pakistan
+   - `api/category/[slug].js` uses NewsAPI.org Top Headlines by category
+   - `api/search.js` uses NewsAPI.org Everything search
 4. Deploy. Your base URL will be: `https://<project>.vercel.app/api`
 5. In the mobile app, set `APP_CONFIG.api.baseUrl` to that URL.
 

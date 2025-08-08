@@ -8,11 +8,16 @@ export default async function handler(req, res) {
   const category = String(req.query.category || 'all')
   if (!q) return res.status(200).json({ items: [] })
   try {
-    // TODO: replace with your real upstream(s)
-    const url = `https://example.com/upstream/search?q=${encodeURIComponent(q)}${
-      category && category !== 'all' ? `&category=${encodeURIComponent(category)}` : ''
-    }`
-    const data = await upstreamJson(url, { 'x-api-key': process.env.NEWS_API_KEY || '' })
+    // NewsAPI.org Everything endpoint (search)
+    // Note: category isn't directly supported on /everything; keep simple text search.
+    const params = new URLSearchParams({
+      q,
+      language: 'en',
+      sortBy: 'publishedAt',
+      pageSize: '50',
+    })
+    const url = `https://newsapi.org/v2/everything?${params.toString()}`
+    const data = await upstreamJson(url, { 'X-Api-Key': process.env.NEWSAPI_ORG || '' })
     const items = Array.isArray(data?.articles)
       ? data.articles
       : Array.isArray(data?.items)

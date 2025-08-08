@@ -1,0 +1,2 @@
+newsapi.org
+Your API key is: 0fe2d0c4869b45cd880f7613b0911b4d
