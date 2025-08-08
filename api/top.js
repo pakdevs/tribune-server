@@ -5,10 +5,36 @@ export default async function handler(req, res) {
   cors(res)
   if (req.method === 'OPTIONS') return res.status(204).end()
   try {
-    // NewsAPI.org Top Headlines (defaults to Pakistan). You can override via query params.
-  const country = String(req.query.country || 'us')
-    const category = req.query.category ? String(req.query.category) : undefined
-    const params = new URLSearchParams({ country, pageSize: '50' })
+    // NewsAPI.org Top Headlines (defaults to US). You can override via query params.
+    const country = String(req.query.country || 'us')
+
+    // Pagination
+    const page = Math.max(1, parseInt(String(req.query.page || '1'), 10) || 1)
+    const rawPageSize = parseInt(String(req.query.pageSize || req.query.limit || '50'), 10)
+    const pageSize = Math.min(100, Math.max(1, rawPageSize || 50))
+
+    // Category aliasing (optional). "all" or unsupported => omit.
+    const rawCategory = req.query.category ? String(req.query.category).toLowerCase() : undefined
+    const alias = {
+      politics: 'general',
+      world: 'general',
+      tech: 'technology',
+      sci: 'science',
+      biz: 'business',
+    }
+    const allowed = new Set([
+      'business',
+      'entertainment',
+      'general',
+      'health',
+      'science',
+      'sports',
+      'technology',
+    ])
+    const mapped = rawCategory ? alias[rawCategory] || rawCategory : undefined
+    const category = mapped && mapped !== 'all' && allowed.has(mapped) ? mapped : undefined
+
+    const params = new URLSearchParams({ country, page: String(page), pageSize: String(pageSize) })
     if (category) params.set('category', category)
     const url = `https://newsapi.org/v2/top-headlines?${params.toString()}`
     const data = await upstreamJson(url, {
@@ -21,7 +47,7 @@ export default async function handler(req, res) {
       : []
     const normalized = items.map(normalize).filter(Boolean)
     // Optional debug: add ?debug=1 to see upstream status when empty
-    if (!normalized.length && String(req.query.debug) === '1') {
+  if (!normalized.length && String(req.query.debug) === '1') {
       return res.status(200).json({
         items: [],
         debug: {
@@ -30,7 +56,9 @@ export default async function handler(req, res) {
           message: data?.message ?? null,
           url,
           country,
-          category: category || null,
+      category: category || null,
+      page,
+      pageSize,
           hasKey: Boolean(process.env.NEWSAPI_ORG),
         },
       })
