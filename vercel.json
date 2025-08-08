@@ -1,8 +1,11 @@
 {
   "version": 2,
+  "routes": [
+    { "src": "/", "dest": "/index.html" }
+  ],
   "functions": {
     "api/**/*.js": {
-  "runtime": "@vercel/node@5.3.11"
+      "runtime": "@vercel/node@5.3.11"
     }
   }
 }
