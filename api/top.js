@@ -6,7 +6,7 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(204).end()
   try {
     // NewsAPI.org Top Headlines (defaults to Pakistan). You can override via query params.
-    const country = String(req.query.country || 'pk')
+  const country = String(req.query.country || 'us')
     const category = req.query.category ? String(req.query.category) : undefined
     const params = new URLSearchParams({ country, pageSize: '50' })
     if (category) params.set('category', category)
