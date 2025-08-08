@@ -1,0 +1,119 @@
+// Shared provider helpers for multiple upstreams
+
+const clamp = (n, min, max) => Math.min(max, Math.max(min, n))
+
+export function getProvidersForPK() {
+  const list = []
+  if (process.env.NEWSDATA_API) list.push({ type: 'newsdata', key: process.env.NEWSDATA_API })
+  if (process.env.WORLD_NEWS_API) list.push({ type: 'worldnews', key: process.env.WORLD_NEWS_API })
+  if (process.env.GNEWS_API) list.push({ type: 'gnews', key: process.env.GNEWS_API })
+  // Exclude NEWSAPI_ORG for PK per project note
+  return list
+}
+
+export function getProvidersForWorld() {
+  const list = []
+  // Start with the higher quota first
+  if (process.env.NEWSDATA_API) list.push({ type: 'newsdata', key: process.env.NEWSDATA_API })
+  if (process.env.NEWSAPI_ORG) list.push({ type: 'newsapi', key: process.env.NEWSAPI_ORG })
+  if (process.env.WORLD_NEWS_API) list.push({ type: 'worldnews', key: process.env.WORLD_NEWS_API })
+  if (process.env.GNEWS_API) list.push({ type: 'gnews', key: process.env.GNEWS_API })
+  return list
+}
+
+// Build a request for a given provider and intent ('top' or 'search')
+export function buildProviderRequest(p, intent, opts) {
+  const page = clamp(parseInt(opts.page || '1', 10) || 1, 1, 100000)
+  const pageSize = clamp(parseInt(opts.pageSize || '50', 10) || 50, 1, 100)
+  const country = String(opts.country || 'us')
+  const q = opts.q ? String(opts.q) : undefined
+
+  if (p.type === 'newsapi') {
+    if (intent === 'top') {
+      const params = new URLSearchParams({ country, page: String(page), pageSize: String(pageSize) })
+      return {
+        url: `https://newsapi.org/v2/top-headlines?${params.toString()}`,
+        headers: { 'X-Api-Key': p.key },
+        pick: (data) => data?.articles || [],
+      }
+    }
+    if (intent === 'search' && q) {
+      const params = new URLSearchParams({ q, language: 'en', sortBy: 'publishedAt', pageSize: String(pageSize) })
+      return {
+        url: `https://newsapi.org/v2/everything?${params.toString()}`,
+        headers: { 'X-Api-Key': p.key },
+        pick: (data) => data?.articles || [],
+      }
+    }
+  }
+
+  if (p.type === 'gnews') {
+    if (intent === 'top') {
+      const params = new URLSearchParams({ lang: 'en', country, max: String(pageSize), page: String(page) })
+      params.set('apikey', p.key)
+      return {
+        url: `https://gnews.io/api/v4/top-headlines?${params.toString()}`,
+        headers: {},
+        pick: (data) => data?.articles || [],
+      }
+    }
+    if (intent === 'search' && q) {
+      const params = new URLSearchParams({ q, lang: 'en', max: String(pageSize), page: String(page) })
+      params.set('apikey', p.key)
+      return {
+        url: `https://gnews.io/api/v4/search?${params.toString()}`,
+        headers: {},
+        pick: (data) => data?.articles || [],
+      }
+    }
+  }
+
+  if (p.type === 'newsdata') {
+    // NewsData.io latest/news endpoint. Pagination is token-based; page param is accepted for simple paging.
+    const params = new URLSearchParams({ country, language: 'en', page: String(page) })
+    params.set('apikey', p.key)
+    return {
+      url: `https://newsdata.io/api/1/latest?${params.toString()}`,
+      headers: {},
+      pick: (data) => data?.results || data?.articles || [],
+    }
+  }
+
+  if (p.type === 'worldnews') {
+    // WorldNews API: use source-countries/language. Use offset approximation for paging.
+    const offset = (page - 1) * pageSize
+    const params = new URLSearchParams({ 'source-countries': country, language: 'en', number: String(pageSize), offset: String(offset) })
+    params.set('api-key', p.key)
+    return {
+      url: `https://api.worldnewsapi.com/search-news?${params.toString()}`,
+      headers: {},
+      pick: (data) => data?.news || data?.articles || [],
+    }
+  }
+
+  return null
+}
+
+export async function tryProvidersSequential(providers, intent, opts, fetcher) {
+  const errors = []
+  if (!providers.length) throw new Error('No providers configured')
+  const start = providers.length > 1 ? Math.floor(Date.now() / 60000) % providers.length : 0
+  for (let i = 0; i < providers.length; i++) {
+    const p = providers[(start + i) % providers.length]
+    try {
+      const req = buildProviderRequest(p, intent, opts)
+      if (!req) throw new Error('Unsupported request for provider')
+      const json = await fetcher(req.url, req.headers)
+      const items = req.pick(json)
+      if (Array.isArray(items) && items.length) {
+        return { items, provider: p.type, url: req.url, raw: json }
+      }
+      throw new Error('Empty result')
+    } catch (e) {
+      errors.push(`${p.type}: ${e?.message || e}`)
+    }
+  }
+  const err = new Error(`All providers failed: ${errors.join(' | ')}`)
+  err.details = errors
+  throw err
+}
