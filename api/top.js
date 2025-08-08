@@ -47,7 +47,7 @@ export default async function handler(req, res) {
       : []
     const normalized = items.map(normalize).filter(Boolean)
     // Optional debug: add ?debug=1 to see upstream status when empty
-  if (!normalized.length && String(req.query.debug) === '1') {
+    if (!normalized.length && String(req.query.debug) === '1') {
       return res.status(200).json({
         items: [],
         debug: {
@@ -56,9 +56,9 @@ export default async function handler(req, res) {
           message: data?.message ?? null,
           url,
           country,
-      category: category || null,
-      page,
-      pageSize,
+          category: category || null,
+          page,
+          pageSize,
           hasKey: Boolean(process.env.NEWSAPI_ORG),
         },
       })
