@@ -6,8 +6,22 @@ export default async function handler(req, res) {
   cors(res)
   if (req.method === 'OPTIONS') return res.status(204).end()
   const rawSlug = String(req.query.slug || '').toLowerCase()
-  const alias = { politics: 'general', world: 'general', tech: 'technology', sci: 'science', biz: 'business' }
-  const allowed = new Set(['business', 'entertainment', 'general', 'health', 'science', 'sports', 'technology'])
+  const alias = {
+    politics: 'general',
+    world: 'general',
+    tech: 'technology',
+    sci: 'science',
+    biz: 'business',
+  }
+  const allowed = new Set([
+    'business',
+    'entertainment',
+    'general',
+    'health',
+    'science',
+    'sports',
+    'technology',
+  ])
   const mapped = rawSlug ? alias[rawSlug] || rawSlug : 'general'
   const category = allowed.has(mapped) ? mapped : 'general'
 
@@ -25,7 +39,9 @@ export default async function handler(req, res) {
     const normalized = result.items.map(normalize).filter(Boolean)
     cache(res, 300, 60)
     if (!normalized.length && String(req.query.debug) === '1') {
-      return res.status(200).json({ items: [], debug: { provider: result.provider, url: result.url, category } })
+      return res
+        .status(200)
+        .json({ items: [], debug: { provider: result.provider, url: result.url, category } })
     }
     return res.status(200).json({ items: normalized })
   } catch (e) {

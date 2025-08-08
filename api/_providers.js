@@ -62,7 +62,12 @@ export function buildProviderRequest(p, intent, opts) {
 
   if (p.type === 'gnews') {
     if (intent === 'top') {
-      const params = new URLSearchParams({ lang: 'en', country, max: String(pageSize), page: String(page) })
+      const params = new URLSearchParams({
+        lang: 'en',
+        country,
+        max: String(pageSize),
+        page: String(page),
+      })
       // Map our categories to GNews "topic" values
       const topicMap = {
         business: 'business',
@@ -112,7 +117,12 @@ export function buildProviderRequest(p, intent, opts) {
   if (p.type === 'worldnews') {
     // WorldNews API: use source-countries/language. Use offset approximation for paging.
     const offset = (page - 1) * pageSize
-    const params = new URLSearchParams({ 'source-countries': country, language: 'en', number: String(pageSize), offset: String(offset) })
+    const params = new URLSearchParams({
+      'source-countries': country,
+      language: 'en',
+      number: String(pageSize),
+      offset: String(offset),
+    })
     if (category && category !== 'all') params.set('text', category)
     params.set('api-key', p.key)
     return {

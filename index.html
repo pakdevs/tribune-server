@@ -93,14 +93,20 @@
           <li><a href="/api/world/category/science">/api/world/category/science</a></li>
           <li><a href="/api/world/category/sports">/api/world/category/sports</a></li>
           <li><a href="/api/world/category/technology">/api/world/category/technology</a></li>
-          <li><a href="/api/pk/category/technology">/api/pk/category/technology</a> <span class="muted">(Pakistan)</span></li>
-          <li><a href="/api/world/category/technology">/api/world/category/technology</a> <span class="muted">(World)</span></li>
+          <li>
+            <a href="/api/pk/category/technology">/api/pk/category/technology</a>
+            <span class="muted">(Pakistan)</span>
+          </li>
+          <li>
+            <a href="/api/world/category/technology">/api/world/category/technology</a>
+            <span class="muted">(World)</span>
+          </li>
         </ul>
         <p class="muted">
           Notes:
-          <br />• <span class="mono">/api/world/category/[slug]</span> is case-insensitive and supports
-          aliasing (politics/world → general, tech → technology, sci → science, biz → business).
-          <br />• Pagination: <span class="mono">page</span> (>=1),
+          <br />• <span class="mono">/api/world/category/[slug]</span> is case-insensitive and
+          supports aliasing (politics/world → general, tech → technology, sci → science, biz →
+          business). <br />• Pagination: <span class="mono">page</span> (>=1),
           <span class="mono">pageSize</span> (1–100). <br />• Multi-provider endpoints use keys from
           environment variables and fallback between providers.
         </p>
