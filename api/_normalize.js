@@ -30,9 +30,9 @@ export const normalize = (raw) => {
     publishDate,
     category,
     imageUrl,
-  // Common aliases so clients can open the source article directly
-  url: sourceUrl,
-  link: sourceUrl,
+    // Common aliases so clients can open the source article directly
+    url: sourceUrl,
+    link: sourceUrl,
     readTime: '3 min read',
     tags: Array.isArray(raw.tags) ? raw.tags : [],
     isBreaking: !!(raw.isBreaking || raw.breaking),
