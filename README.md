@@ -5,7 +5,7 @@ Minimal serverless proxy for Pakistan Tribune app.
 ## Endpoints
 
 - `GET /api/top`
-- `GET /api/category/[slug]`
+- `GET /api/world/category/[slug]`
 - `GET /api/search?q=term&category=slug|all`
 
 All responses: `{ items: Article[] }` where each Article is normalized for the app.
