@@ -27,10 +27,18 @@ export function buildProviderRequest(p, intent, opts) {
   const pageSize = clamp(parseInt(opts.pageSize || '50', 10) || 50, 1, 100)
   const country = String(opts.country || 'us')
   const q = opts.q ? String(opts.q) : undefined
+  const category = opts.category ? String(opts.category).toLowerCase() : undefined
 
   if (p.type === 'newsapi') {
     if (intent === 'top') {
-      const params = new URLSearchParams({ country, page: String(page), pageSize: String(pageSize) })
+      const params = new URLSearchParams({
+        country,
+        page: String(page),
+        pageSize: String(pageSize),
+      })
+      if (category && category !== 'all' && category !== 'general') {
+        params.set('category', category)
+      }
       return {
         url: `https://newsapi.org/v2/top-headlines?${params.toString()}`,
         headers: { 'X-Api-Key': p.key },
@@ -38,7 +46,12 @@ export function buildProviderRequest(p, intent, opts) {
       }
     }
     if (intent === 'search' && q) {
-      const params = new URLSearchParams({ q, language: 'en', sortBy: 'publishedAt', pageSize: String(pageSize) })
+      const params = new URLSearchParams({
+        q,
+        language: 'en',
+        sortBy: 'publishedAt',
+        pageSize: String(pageSize),
+      })
       return {
         url: `https://newsapi.org/v2/everything?${params.toString()}`,
         headers: { 'X-Api-Key': p.key },
@@ -50,6 +63,17 @@ export function buildProviderRequest(p, intent, opts) {
   if (p.type === 'gnews') {
     if (intent === 'top') {
       const params = new URLSearchParams({ lang: 'en', country, max: String(pageSize), page: String(page) })
+      // Map our categories to GNews "topic" values
+      const topicMap = {
+        business: 'business',
+        entertainment: 'entertainment',
+        technology: 'technology',
+        sports: 'sports',
+        science: 'science',
+        health: 'health',
+        general: 'world',
+      }
+      if (category && topicMap[category]) params.set('topic', topicMap[category])
       params.set('apikey', p.key)
       return {
         url: `https://gnews.io/api/v4/top-headlines?${params.toString()}`,
@@ -58,7 +82,12 @@ export function buildProviderRequest(p, intent, opts) {
       }
     }
     if (intent === 'search' && q) {
-      const params = new URLSearchParams({ q, lang: 'en', max: String(pageSize), page: String(page) })
+      const params = new URLSearchParams({
+        q,
+        lang: 'en',
+        max: String(pageSize),
+        page: String(page),
+      })
       params.set('apikey', p.key)
       return {
         url: `https://gnews.io/api/v4/search?${params.toString()}`,
@@ -71,6 +100,7 @@ export function buildProviderRequest(p, intent, opts) {
   if (p.type === 'newsdata') {
     // NewsData.io latest/news endpoint. Pagination is token-based; page param is accepted for simple paging.
     const params = new URLSearchParams({ country, language: 'en', page: String(page) })
+    if (category && category !== 'all') params.set('category', category)
     params.set('apikey', p.key)
     return {
       url: `https://newsdata.io/api/1/latest?${params.toString()}`,
@@ -83,6 +113,7 @@ export function buildProviderRequest(p, intent, opts) {
     // WorldNews API: use source-countries/language. Use offset approximation for paging.
     const offset = (page - 1) * pageSize
     const params = new URLSearchParams({ 'source-countries': country, language: 'en', number: String(pageSize), offset: String(offset) })
+    if (category && category !== 'all') params.set('text', category)
     params.set('api-key', p.key)
     return {
       url: `https://api.worldnewsapi.com/search-news?${params.toString()}`,

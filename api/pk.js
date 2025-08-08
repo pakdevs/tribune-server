@@ -19,7 +19,9 @@ export default async function handler(req, res) {
     const normalized = result.items.map(normalize).filter(Boolean)
     cache(res, 300, 60)
     if (!normalized.length && String(req.query.debug) === '1') {
-      return res.status(200).json({ items: [], debug: { provider: result.provider, url: result.url } })
+      return res
+        .status(200)
+        .json({ items: [], debug: { provider: result.provider, url: result.url } })
     }
     return res.status(200).json({ items: normalized })
   } catch (e) {

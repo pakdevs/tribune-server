@@ -56,18 +56,33 @@
       <div class="card">
         <p>Try these endpoints:</p>
         <ul>
-          <li><a href="/api/top">/api/top</a> <span class="muted">(US default, all categories)</span></li>
-          <li><a href="/api/world">/api/world</a> <span class="muted">(multi-provider, world news)</span></li>
-          <li><a href="/api/pk">/api/pk</a> <span class="muted">(multi-provider, Pakistan)</span></li>
+          <li>
+            <a href="/api/top">/api/top</a> <span class="muted">(US default, all categories)</span>
+          </li>
+          <li>
+            <a href="/api/world">/api/world</a>
+            <span class="muted">(multi-provider, world news)</span>
+          </li>
+          <li>
+            <a href="/api/pk">/api/pk</a> <span class="muted">(multi-provider, Pakistan)</span>
+          </li>
           <li><a href="/api/search?q=test">/api/search?q=test</a></li>
         </ul>
         <p>Examples:</p>
         <ul>
           <li><a href="/api/top?page=1&pageSize=20">/api/top?page=1&amp;pageSize=20</a></li>
-          <li><a href="/api/top?category=technology&page=2">/api/top?category=technology&amp;page=2</a></li>
+          <li>
+            <a href="/api/top?category=technology&page=2"
+              >/api/top?category=technology&amp;page=2</a
+            >
+          </li>
           <li><a href="/api/world?page=1&pageSize=20">/api/world?page=1&amp;pageSize=20</a></li>
           <li><a href="/api/pk?page=1&pageSize=20">/api/pk?page=1&amp;pageSize=20</a></li>
-          <li><a href="/api/search?q=pakistan&page=1&pageSize=20">/api/search?q=pakistan&amp;page=1&amp;pageSize=20</a></li>
+          <li>
+            <a href="/api/search?q=pakistan&page=1&pageSize=20"
+              >/api/search?q=pakistan&amp;page=1&amp;pageSize=20</a
+            >
+          </li>
         </ul>
         <p>Categories:</p>
         <ul>
@@ -78,12 +93,16 @@
           <li><a href="/api/category/science">/api/category/science</a></li>
           <li><a href="/api/category/sports">/api/category/sports</a></li>
           <li><a href="/api/category/technology">/api/category/technology</a></li>
+          <li><a href="/api/pk/category/technology">/api/pk/category/technology</a> <span class="muted">(Pakistan)</span></li>
+          <li><a href="/api/world/category/technology">/api/world/category/technology</a> <span class="muted">(World)</span></li>
         </ul>
         <p class="muted">
           Notes:
-          <br />• <span class="mono">/api/category/[slug]</span> is case-insensitive and supports aliasing (politics/world → general, tech → technology, sci → science, biz → business).
-          <br />• Pagination: <span class="mono">page</span> (>=1), <span class="mono">pageSize</span> (1–100).
-          <br />• Multi-provider endpoints use keys from environment variables and fallback between providers.
+          <br />• <span class="mono">/api/category/[slug]</span> is case-insensitive and supports
+          aliasing (politics/world → general, tech → technology, sci → science, biz → business).
+          <br />• Pagination: <span class="mono">page</span> (>=1),
+          <span class="mono">pageSize</span> (1–100). <br />• Multi-provider endpoints use keys from
+          environment variables and fallback between providers.
         </p>
       </div>
     </div>
