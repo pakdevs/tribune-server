@@ -5,9 +5,10 @@ const clamp = (n, min, max) => Math.min(max, Math.max(min, n))
 
 export function getProvidersForPK() {
   const list = []
+  // Prioritize gnews first
+  if (process.env.GNEWS_API) list.push({ type: 'gnews', key: process.env.GNEWS_API })
   if (process.env.NEWSDATA_API) list.push({ type: 'newsdata', key: process.env.NEWSDATA_API })
   if (process.env.WORLD_NEWS_API) list.push({ type: 'worldnews', key: process.env.WORLD_NEWS_API })
-  if (process.env.GNEWS_API) list.push({ type: 'gnews', key: process.env.GNEWS_API })
   // Fallback: use NewsAPI Everything search (q=Pakistan) when all PK-capable providers fail / are empty
   if (process.env.NEWSAPI_ORG) list.push({ type: 'newsapi_pk', key: process.env.NEWSAPI_ORG })
   return list
@@ -15,11 +16,11 @@ export function getProvidersForPK() {
 
 export function getProvidersForWorld() {
   const list = []
-  // Start with the higher quota first
+  // New priority: gnews first
+  if (process.env.GNEWS_API) list.push({ type: 'gnews', key: process.env.GNEWS_API })
   if (process.env.NEWSDATA_API) list.push({ type: 'newsdata', key: process.env.NEWSDATA_API })
   if (process.env.NEWSAPI_ORG) list.push({ type: 'newsapi', key: process.env.NEWSAPI_ORG })
   if (process.env.WORLD_NEWS_API) list.push({ type: 'worldnews', key: process.env.WORLD_NEWS_API })
-  if (process.env.GNEWS_API) list.push({ type: 'gnews', key: process.env.GNEWS_API })
   return list
 }
 
@@ -188,10 +189,9 @@ export async function tryProvidersSequential(providers, intent, opts, fetcher) {
   const attempts = []
   const attemptsDetail = []
   if (!providers.length) throw new Error('No providers configured')
-  // Always prioritize 'newsdata' first if present, then follow declared order.
-  // This overrides the previous minute-based rotation so that NewsData gets first-request preference.
+  // Always prioritize 'gnews' first if present, then follow declared order.
   let ordered = providers
-  const preferredIdx = providers.findIndex((p) => p.type === 'newsdata')
+  const preferredIdx = providers.findIndex((p) => p.type === 'gnews')
   if (preferredIdx > 0) {
     ordered = [...providers]
     const [preferred] = ordered.splice(preferredIdx, 1)
