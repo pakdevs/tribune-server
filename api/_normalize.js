@@ -35,6 +35,12 @@ export const normalize = (raw) => {
     ''
 
   const sourceUrl = String(raw.sourceUrl || raw.link || raw.url || '')
+  let sourceDomain = ''
+  if (sourceUrl) {
+    try {
+      sourceDomain = new URL(sourceUrl).hostname.replace(/^www\./, '')
+    } catch {}
+  }
 
   if (!sourceName && sourceUrl) {
     try {
@@ -44,6 +50,29 @@ export const normalize = (raw) => {
   }
 
   sourceName = String(sourceName)
+  // Create a display variant without common TLDs (keep first label(s) before TLD)
+  let displaySourceName = sourceName
+  if (sourceDomain && (!displaySourceName || displaySourceName === sourceDomain)) {
+    // Strip country/generic TLDs (.com, .pk, .net, .org, etc.) keeping first segment before first dot
+    const base = sourceDomain.split('.')
+    if (base.length > 1) {
+      // If domain like dailytimes.com.pk keep dailytimes
+      displaySourceName = base[0]
+    }
+  } else if (displaySourceName) {
+    // Remove trailing .com, .pk etc from an already chosen name if it matches a domain pattern
+    displaySourceName = displaySourceName.replace(/\.(com|net|org|pk|co|io|news)(\.[a-z]{2})?$/i, '')
+  }
+  // Capitalize words
+  displaySourceName = displaySourceName
+    .split(/[-_\s]+/)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ')
+
+  // Simple icon (browser favicon service). Consumers can fall back to initials.
+  const sourceIcon = sourceDomain
+    ? `https://www.google.com/s2/favicons?sz=64&domain=${encodeURIComponent(sourceDomain)}`
+    : ''
 
   return {
     id,
@@ -61,7 +90,10 @@ export const normalize = (raw) => {
     isBreaking: !!(raw.isBreaking || raw.breaking),
     likes: Number(raw.likes || 0),
     shares: Number(raw.shares || 0),
-    sourceName,
+  sourceName, // raw / original best-effort
+  displaySourceName,
+  sourceDomain,
+  sourceIcon,
     sourceUrl,
   }
 }
