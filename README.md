@@ -1,33 +1,79 @@
-# News Proxy (Vercel)
+# Pakistan Tribune News Proxy
 
-Minimal serverless proxy for Pakistan Tribune app.
+Production-focused serverless API aggregator providing normalized news articles for the Pakistan Tribune app.
 
-## Endpoints
+## Core Endpoints
 
-- `GET /api/top`
-- `GET /api/world/category/[slug]`
-- `GET /api/search?q=term&category=slug|all`
+| Purpose | Route | Notes |
+|---------|-------|-------|
+| World mixed headlines | `GET /api/world` | Multi-provider fallback |
+| Pakistan headlines | `GET /api/pk` | Includes NewsAPI search fallback (q=Pakistan) |
+| World category | `GET /api/world/category/{slug}` | Slugs: business, entertainment, general, health, science, sports, technology |
+| Pakistan category | `GET /api/pk/category/{slug}` | Same slug set; fallback logic applies |
+| US Top (legacy single provider) | `GET /api/top` | Direct NewsAPI top-headlines (US default) |
+| Search (global) | `GET /api/search?q=term` | NewsAPI Everything (en) |
 
-All responses: `{ items: Article[] }` where each Article is normalized for the app.
+All successful responses: `{ items: Article[] }` (empty array if no matches). Errors: `{ error: string, message? }`.
 
-## Setup
+## Normalized Article Fields
 
-1. Create a project on Vercel and link this `vercel-proxy` folder.
-2. Add environment variables in Project Settings → Environment Variables:
-   - `NEWSAPI_ORG` (your NewsAPI.org API key)
-3. Upstreams:
-   - `api/top.js` uses NewsAPI.org Top Headlines for Pakistan
-   - `api/category/[slug].js` uses NewsAPI.org Top Headlines by category
-   - `api/search.js` uses NewsAPI.org Everything search
-4. Deploy. Your base URL will be: `https://<project>.vercel.app/api`
-5. In the mobile app, set `APP_CONFIG.api.baseUrl` to that URL.
+```
+{
+   id, title, summary, content, author, publishDate, category,
+   imageUrl, url, link, sourceName, displaySourceName, sourceDomain,
+   sourceIcon, sourceUrl, readTime, tags[], isBreaking, likes, shares
+}
+```
 
-## CORS & Caching
+`displaySourceName` strips TLDs for UI ("Dawn" instead of dawn.com). `sourceIcon` is a 64px favicon URL.
 
-- CORS is open (`*`). Adjust as needed.
-- Cache-Control: `s-maxage=300, stale-while-revalidate=60`.
+## Environment Variables
 
-## Notes
+Set only in Vercel (never commit keys):
 
-- Keep API keys only in Vercel env vars.
-- You can extend normalization in `api/_normalize.js`.
+- `NEWSAPI_ORG`
+- `NEWSDATA_API`
+- `WORLD_NEWS_API`
+- `GNEWS_API`
+
+Endpoints automatically adapt to whichever keys are present.
+
+## Provider Fallback Strategy
+
+1. Attempt higher quota / broader sources first (NewsData).
+2. Try NewsAPI / WorldNews / GNews in rotating order (minute-based) to distribute load.
+3. Pakistan endpoints append a final synthetic provider `newsapi_pk` performing an Everything search `q=Pakistan` if category/country sources fail.
+
+## Category & Aliases
+
+Canonical slugs: `business, entertainment, general, health, science, sports, technology`.
+Aliases accepted (mapped internally): `politics, world → general`, `tech → technology`, `sci → science`, `biz → business`.
+
+## Caching & Headers
+
+- Cache: `s-maxage=300, stale-while-revalidate=60` (CDN layer) via `cache()` helper.
+- CORS: `*` (open). Adjust in `api/_shared.js` if you need to lock to your app domain.
+- Basic security headers added: `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options`, `Permissions-Policy`.
+
+## Local Development
+
+Minimal (no build step):
+
+```
+vercel dev
+```
+
+## Future Enhancements (Not Yet Implemented)
+
+- Durable provider usage metrics (Redis / KV).
+- On-demand media metadata endpoint (aspect ratio, blurhash).
+- Rate limiting (middleware).
+
+## Maintenance
+
+- Keep dependencies minimal (currently none) to ensure fast cold starts.
+- Update runtime version in `vercel.json` only when needed; pinning prevents surprise breakage.
+
+## License
+
+Proprietary – internal project (add a license if distributing externally).
