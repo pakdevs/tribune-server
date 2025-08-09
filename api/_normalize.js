@@ -19,8 +19,32 @@ export const normalize = (raw) => {
   const imageUrl = String(
     raw.imageUrl || raw.urlToImage || raw.image || raw.thumbnail || raw.enclosure?.url || ''
   )
-  const sourceName = String(raw.source?.name || raw.source || raw.rights || '')
+
+  // Try multiple possible fields for source name across providers
+  let sourceName =
+    raw.source?.name ||
+    raw.source_name ||
+    raw.sourceName ||
+    raw.source_id ||
+    raw.source ||
+    raw.publisher ||
+    raw.site ||
+    raw.domain ||
+    raw.rights ||
+    raw.newsSite ||
+    ''
+
   const sourceUrl = String(raw.sourceUrl || raw.link || raw.url || '')
+
+  if (!sourceName && sourceUrl) {
+    try {
+      const host = new URL(sourceUrl).hostname.replace(/^www\./, '')
+      sourceName = host
+    } catch {}
+  }
+
+  sourceName = String(sourceName)
+
   return {
     id,
     title,
@@ -30,9 +54,8 @@ export const normalize = (raw) => {
     publishDate,
     category,
     imageUrl,
-    // Common aliases so clients can open the source article directly
-    url: sourceUrl,
-    link: sourceUrl,
+    url: sourceUrl, // alias
+    link: sourceUrl, // alias
     readTime: '3 min read',
     tags: Array.isArray(raw.tags) ? raw.tags : [],
     isBreaking: !!(raw.isBreaking || raw.breaking),
