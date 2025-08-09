@@ -2,6 +2,7 @@ import { normalize } from './_normalize.js'
 import { cors, cache } from './_shared.js'
 import { makeKey, getFresh, getStale, setCache } from './_cache.js'
 import { getProvidersForWorld, tryProvidersSequential } from './_providers.js'
+import { getInFlight, setInFlight } from './_inflight.js'
 
 // Alias + allowed sets (mirrors world category logic for consistency)
 const alias = {
@@ -46,24 +47,32 @@ export default async function handler(req, res) {
         return res.status(200).json({ items: fresh.items })
       }
     }
+    // Miss path: attempt providers with in-flight dedupe
     res.setHeader('X-Cache', 'MISS')
     const providers = getProvidersForWorld()
-    const result = await tryProvidersSequential(
-      providers,
-      'top',
-      { page, pageSize, country, category },
-      (url, headers) =>
-        fetch(url, { headers }).then((r) => {
-          if (!r.ok) throw new Error('Upstream ' + r.status)
-          return r.json()
-        })
-    )
+    const flightKey = `top:${country}:${category}:${page}:${pageSize}`
+    let flight = getInFlight(flightKey)
+    if (!flight) {
+      flight = setInFlight(
+        flightKey,
+        tryProvidersSequential(
+          providers,
+          'top',
+          { page, pageSize, country, category },
+          (url, headers) =>
+            fetch(url, { headers }).then((r) => {
+              if (!r.ok) throw new Error('Upstream ' + r.status)
+              return r.json()
+            })
+        )
+      )
+    }
+    const result = await flight
     const normalized = result.items.map(normalize).filter(Boolean)
     res.setHeader('X-Provider', result.provider)
     res.setHeader('X-Provider-Attempts', result.attempts?.join(',') || result.provider)
     if (result.attemptsDetail)
       res.setHeader('X-Provider-Attempts-Detail', result.attemptsDetail.join(','))
-    res.setHeader('X-Provider-Articles', String(normalized.length))
     setCache(cacheKey, {
       items: normalized,
       meta: {
@@ -72,6 +81,7 @@ export default async function handler(req, res) {
         attemptsDetail: result.attemptsDetail,
       },
     })
+    res.setHeader('X-Provider-Articles', String(normalized.length))
     cache(res, 300, 60)
     if (String(req.query.debug) === '1') {
       return res

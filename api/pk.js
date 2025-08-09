@@ -2,6 +2,7 @@ import { normalize } from './_normalize.js'
 import { cors, cache, upstreamJson } from './_shared.js'
 import { makeKey, getFresh, getStale, setCache } from './_cache.js'
 import { getProvidersForPK, tryProvidersSequential } from './_providers.js'
+import { getInFlight, setInFlight } from './_inflight.js'
 
 export default async function handler(req, res) {
   cors(res)
@@ -10,7 +11,7 @@ export default async function handler(req, res) {
   const pageSize = String(req.query.pageSize || req.query.limit || '50')
   const country = String(req.query.country || 'pk')
   try {
-    const cacheKey = makeKey(['pk', 'top', country, page, pageSize])
+  const cacheKey = makeKey(['pk', 'top', country, page, pageSize])
     const noCache = String(req.query.nocache || '0') === '1'
     if (!noCache) {
       const fresh = getFresh(cacheKey)
@@ -25,14 +26,23 @@ export default async function handler(req, res) {
         return res.status(200).json({ items: fresh.items })
       }
     }
+    // Miss path: attempt providers with in-flight dedupe
     res.setHeader('X-Cache', 'MISS')
     const providers = getProvidersForPK()
-    const result = await tryProvidersSequential(
-      providers,
-      'top',
-      { page, pageSize, country },
-      (url, headers) => upstreamJson(url, headers)
-    )
+    const flightKey = `pk:${country}:${page}:${pageSize}`
+    let flight = getInFlight(flightKey)
+    if (!flight) {
+      flight = setInFlight(
+        flightKey,
+        tryProvidersSequential(
+          providers,
+          'top',
+          { page, pageSize, country },
+          (url, headers) => upstreamJson(url, headers)
+        )
+      )
+    }
+    const result = await flight
     const normalized = result.items.map(normalize).filter(Boolean)
     res.setHeader('X-Provider', result.provider)
     res.setHeader('X-Provider-Attempts', result.attempts?.join(',') || result.provider)
