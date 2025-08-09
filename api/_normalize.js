@@ -61,7 +61,10 @@ export const normalize = (raw) => {
     }
   } else if (displaySourceName) {
     // Remove trailing .com, .pk etc from an already chosen name if it matches a domain pattern
-    displaySourceName = displaySourceName.replace(/\.(com|net|org|pk|co|io|news)(\.[a-z]{2})?$/i, '')
+    displaySourceName = displaySourceName.replace(
+      /\.(com|net|org|pk|co|io|news)(\.[a-z]{2})?$/i,
+      ''
+    )
   }
   // Capitalize words
   displaySourceName = displaySourceName
@@ -73,6 +76,10 @@ export const normalize = (raw) => {
   const sourceIcon = sourceDomain
     ? `https://www.google.com/s2/favicons?sz=64&domain=${encodeURIComponent(sourceDomain)}`
     : ''
+  // Lightweight media stubs
+  const hasImage = !!imageUrl
+  const safeImage = imageUrl
+  const imageAspectRatio = null
 
   return {
     id,
@@ -83,6 +90,9 @@ export const normalize = (raw) => {
     publishDate,
     category,
     imageUrl,
+    hasImage,
+    safeImage,
+    imageAspectRatio,
     url: sourceUrl, // alias
     link: sourceUrl, // alias
     readTime: '3 min read',
@@ -90,10 +100,10 @@ export const normalize = (raw) => {
     isBreaking: !!(raw.isBreaking || raw.breaking),
     likes: Number(raw.likes || 0),
     shares: Number(raw.shares || 0),
-  sourceName, // raw / original best-effort
-  displaySourceName,
-  sourceDomain,
-  sourceIcon,
+    sourceName, // raw / original best-effort
+    displaySourceName,
+    sourceDomain,
+    sourceIcon,
     sourceUrl,
   }
 }

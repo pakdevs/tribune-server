@@ -1,71 +1,111 @@
 import { normalize } from './_normalize.js'
-import { cors, cache, upstreamJson } from './_shared.js'
+import { cors, cache } from './_shared.js'
+import { makeKey, getFresh, getStale, setCache } from './_cache.js'
+import { getProvidersForWorld, tryProvidersSequential } from './_providers.js'
+
+// Alias + allowed sets (mirrors world category logic for consistency)
+const alias = {
+  politics: 'general',
+  world: 'general',
+  tech: 'technology',
+  sci: 'science',
+  biz: 'business',
+}
+const allowed = new Set([
+  'business',
+  'entertainment',
+  'general',
+  'health',
+  'science',
+  'sports',
+  'technology',
+])
 
 export default async function handler(req, res) {
   cors(res)
   if (req.method === 'OPTIONS') return res.status(204).end()
+  const country = String(req.query.country || 'us')
+  const page = String(req.query.page || '1')
+  const pageSize = String(req.query.pageSize || req.query.limit || '50')
+  const rawCategory = req.query.category ? String(req.query.category).toLowerCase() : 'general'
+  const mapped = rawCategory ? alias[rawCategory] || rawCategory : 'general'
+  const category = allowed.has(mapped) ? mapped : 'general'
   try {
-    // NewsAPI.org Top Headlines (defaults to US). You can override via query params.
-    const country = String(req.query.country || 'us')
-
-    // Pagination
-    const page = Math.max(1, parseInt(String(req.query.page || '1'), 10) || 1)
-    const rawPageSize = parseInt(String(req.query.pageSize || req.query.limit || '50'), 10)
-    const pageSize = Math.min(100, Math.max(1, rawPageSize || 50))
-
-    // Category aliasing (optional). "all" or unsupported => omit.
-    const rawCategory = req.query.category ? String(req.query.category).toLowerCase() : undefined
-    const alias = {
-      politics: 'general',
-      world: 'general',
-      tech: 'technology',
-      sci: 'science',
-      biz: 'business',
+    const cacheKey = makeKey(['top', country, category, page, pageSize])
+    const noCache = String(req.query.nocache || '0') === '1'
+    if (!noCache) {
+      const fresh = getFresh(cacheKey)
+      if (fresh) {
+        res.setHeader('X-Cache', 'HIT')
+        res.setHeader('X-Provider', fresh.meta.provider)
+        res.setHeader('X-Provider-Attempts', fresh.meta.attempts.join(','))
+        if (fresh.meta.attemptsDetail)
+          res.setHeader('X-Provider-Attempts-Detail', fresh.meta.attemptsDetail.join(','))
+        res.setHeader('X-Provider-Articles', String(fresh.items.length))
+        cache(res, 300, 60)
+        return res.status(200).json({ items: fresh.items })
+      }
     }
-    const allowed = new Set([
-      'business',
-      'entertainment',
-      'general',
-      'health',
-      'science',
-      'sports',
-      'technology',
-    ])
-    const mapped = rawCategory ? alias[rawCategory] || rawCategory : undefined
-    const category = mapped && mapped !== 'all' && allowed.has(mapped) ? mapped : undefined
-
-    const params = new URLSearchParams({ country, page: String(page), pageSize: String(pageSize) })
-    if (category) params.set('category', category)
-    const url = `https://newsapi.org/v2/top-headlines?${params.toString()}`
-    const data = await upstreamJson(url, {
-      'X-Api-Key': process.env.NEWSAPI_ORG || '',
+    res.setHeader('X-Cache', 'MISS')
+    const providers = getProvidersForWorld()
+    const result = await tryProvidersSequential(
+      providers,
+      'top',
+      { page, pageSize, country, category },
+      (url, headers) =>
+        fetch(url, { headers }).then((r) => {
+          if (!r.ok) throw new Error('Upstream ' + r.status)
+          return r.json()
+        })
+    )
+    const normalized = result.items.map(normalize).filter(Boolean)
+    res.setHeader('X-Provider', result.provider)
+    res.setHeader('X-Provider-Attempts', result.attempts?.join(',') || result.provider)
+    if (result.attemptsDetail)
+      res.setHeader('X-Provider-Attempts-Detail', result.attemptsDetail.join(','))
+    res.setHeader('X-Provider-Articles', String(normalized.length))
+    setCache(cacheKey, {
+      items: normalized,
+      meta: {
+        provider: result.provider,
+        attempts: result.attempts || [result.provider],
+        attemptsDetail: result.attemptsDetail,
+      },
     })
-    const items = Array.isArray(data?.articles)
-      ? data.articles
-      : Array.isArray(data?.items)
-      ? data.items
-      : []
-    const normalized = items.map(normalize).filter(Boolean)
-    // Optional debug: add ?debug=1 to see upstream status when empty
-    if (!normalized.length && String(req.query.debug) === '1') {
-      return res.status(200).json({
-        items: [],
-        debug: {
-          upstreamStatus: data?.status ?? null,
-          totalResults: data?.totalResults ?? null,
-          message: data?.message ?? null,
-          url,
-          country,
-          category: category || null,
-          page,
-          pageSize,
-          hasKey: Boolean(process.env.NEWSAPI_ORG),
-        },
-      })
-    }
     cache(res, 300, 60)
+    if (String(req.query.debug) === '1') {
+      return res
+        .status(200)
+        .json({
+          items: normalized,
+          debug: {
+            provider: result.provider,
+            attempts: result.attempts,
+            attemptsDetail: result.attemptsDetail,
+            url: result.url,
+            cacheKey,
+            noCache,
+            country,
+            category,
+          },
+        })
+    }
     return res.status(200).json({ items: normalized })
   } catch (e) {
+    const cacheKey = makeKey(['top', country, category, page, pageSize])
+    const stale = getStale(cacheKey)
+    if (stale) {
+      res.setHeader('X-Cache', 'STALE')
+      res.setHeader('X-Stale', '1')
+      res.setHeader('X-Provider', stale.meta.provider)
+      res.setHeader('X-Provider-Attempts', stale.meta.attempts.join(','))
+      if (stale.meta.attemptsDetail)
+        res.setHeader('X-Provider-Attempts-Detail', stale.meta.attemptsDetail.join(','))
+      res.setHeader('X-Provider-Articles', String(stale.items.length))
+      return res.status(200).json({ items: stale.items, stale: true })
+    }
+    if (String(req.query.debug) === '1')
+      return res.status(500).json({ error: 'Proxy failed', message: e?.message || String(e) })
     return res.status(500).json({ error: 'Proxy failed' })
   }
 }

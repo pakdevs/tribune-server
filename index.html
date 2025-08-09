@@ -54,7 +54,7 @@
       <h1>News Proxy is deployed</h1>
       <p class="muted">This project exposes API routes for the Pakistan Tribune app.</p>
       <div class="card">
-  <p>API endpoints:</p>
+        <p>API endpoints:</p>
         <ul>
           <li>
             <a href="/api/top">/api/top</a> <span class="muted">(US default, all categories)</span>
@@ -68,7 +68,7 @@
           </li>
           <li><a href="/api/search?q=test">/api/search?q=test</a></li>
         </ul>
-  <p>Examples:</p>
+        <p>Examples:</p>
         <ul>
           <li><a href="/api/top?page=1&pageSize=20">/api/top?page=1&amp;pageSize=20</a></li>
           <li>
@@ -84,7 +84,7 @@
             >
           </li>
         </ul>
-  <p><strong>Categories (World)</strong></p>
+        <p><strong>Categories (World)</strong></p>
         <ul>
           <li><a href="/api/world/category/business">/api/world/category/business</a></li>
           <li><a href="/api/world/category/entertainment">/api/world/category/entertainment</a></li>
@@ -94,7 +94,7 @@
           <li><a href="/api/world/category/sports">/api/world/category/sports</a></li>
           <li><a href="/api/world/category/technology">/api/world/category/technology</a></li>
         </ul>
-  <p><strong>Categories (Pakistan)</strong></p>
+        <p><strong>Categories (Pakistan)</strong></p>
         <ul>
           <li><a href="/api/pk/category/business">/api/pk/category/business</a></li>
           <li><a href="/api/pk/category/entertainment">/api/pk/category/entertainment</a></li>
@@ -106,11 +106,11 @@
         </ul>
         <p class="muted">
           Notes:
-          <br />• Category aliases: politics/world → general, tech → technology, sci → science, biz → business.
-          <br />• Pagination: page (>=1), pageSize (1–100).
-          <br />• Provider fallback & rotation reduce rate-limit impact.
-          <br />• PK endpoint final fallback: NewsAPI Everything (q=Pakistan).
-          <br />• Add <code>?debug=1</code> to any endpoint (dev only) to inspect upstream provider.
+          <br />• Category aliases: politics/world → general, tech → technology, sci → science, biz
+          → business. <br />• Pagination: page (>=1), pageSize (1–100). <br />• Provider fallback &
+          rotation reduce rate-limit impact. <br />• PK endpoint final fallback: NewsAPI Everything
+          (q=Pakistan). <br />• Add <code>?debug=1</code> to any endpoint (dev only) to inspect
+          upstream provider.
         </p>
       </div>
     </div>

@@ -4,14 +4,15 @@ Production-focused serverless API aggregator providing normalized news articles 
 
 ## Core Endpoints
 
-| Purpose | Route | Notes |
-|---------|-------|-------|
-| World mixed headlines | `GET /api/world` | Multi-provider fallback |
-| Pakistan headlines | `GET /api/pk` | Includes NewsAPI search fallback (q=Pakistan) |
-| World category | `GET /api/world/category/{slug}` | Slugs: business, entertainment, general, health, science, sports, technology |
-| Pakistan category | `GET /api/pk/category/{slug}` | Same slug set; fallback logic applies |
-| US Top (legacy single provider) | `GET /api/top` | Direct NewsAPI top-headlines (US default) |
-| Search (global) | `GET /api/search?q=term` | NewsAPI Everything (en) |
+| Purpose                         | Route                            | Notes                                                                        |
+| ------------------------------- | -------------------------------- | ---------------------------------------------------------------------------- |
+| World mixed headlines           | `GET /api/world`                 | Multi-provider fallback                                                      |
+| Pakistan headlines              | `GET /api/pk`                    | Includes NewsAPI search fallback (q=Pakistan)                                |
+| World category                  | `GET /api/world/category/{slug}` | Slugs: business, entertainment, general, health, science, sports, technology |
+| Pakistan category               | `GET /api/pk/category/{slug}`    | Same slug set; fallback logic applies                                        |
+| US Top (legacy single provider) | `GET /api/top`                   | Direct NewsAPI top-headlines (US default)                                    |
+| Search (global)                 | `GET /api/search?q=term`         | NewsAPI Everything (en)                                                      |
+| Provider stats (ephemeral)      | `GET /api/stats`                 | In-memory counts (resets on cold start)                                      |
 
 All successful responses: `{ items: Article[] }` (empty array if no matches). Errors: `{ error: string, message? }`.
 
@@ -20,7 +21,8 @@ All successful responses: `{ items: Article[] }` (empty array if no matches). Er
 ```
 {
    id, title, summary, content, author, publishDate, category,
-   imageUrl, url, link, sourceName, displaySourceName, sourceDomain,
+   imageUrl, hasImage, safeImage, imageAspectRatio,
+   url, link, sourceName, displaySourceName, sourceDomain,
    sourceIcon, sourceUrl, readTime, tags[], isBreaking, likes, shares
 }
 ```
@@ -68,6 +70,16 @@ vercel dev
 - Durable provider usage metrics (Redis / KV).
 - On-demand media metadata endpoint (aspect ratio, blurhash).
 - Rate limiting (middleware).
+
+### Observability (Phase 1 Implemented)
+
+Per-response headers:
+
+- `X-Provider`: provider that returned articles.
+- `X-Provider-Attempts`: ordered list of attempted providers.
+- `X-Provider-Articles`: number of normalized articles.
+
+Ephemeral usage summary: `GET /api/stats`.
 
 ## Maintenance
 

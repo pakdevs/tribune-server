@@ -1,4 +1,5 @@
 // Shared provider helpers for multiple upstreams
+import { recordSuccess, recordError, recordEmpty } from './_stats.js'
 
 const clamp = (n, min, max) => Math.min(max, Math.max(min, n))
 
@@ -136,7 +137,16 @@ export function buildProviderRequest(p, intent, opts) {
   }
 
   if (p.type === 'newsdata') {
-    // NewsData.io latest/news endpoint. Pagination is token-based; page param is accepted for simple paging.
+    // NewsData.io: use /latest for 'top', /news (search) when q provided.
+    if (intent === 'search' && q) {
+      const params = new URLSearchParams({ q, language: 'en', page: String(page) })
+      params.set('apikey', p.key)
+      return {
+        url: `https://newsdata.io/api/1/news?${params.toString()}`,
+        headers: {},
+        pick: (data) => data?.results || data?.articles || [],
+      }
+    }
     const params = new URLSearchParams({ country, language: 'en', page: String(page) })
     if (category && category !== 'all') params.set('category', category)
     params.set('apikey', p.key)
@@ -148,15 +158,20 @@ export function buildProviderRequest(p, intent, opts) {
   }
 
   if (p.type === 'worldnews') {
-    // WorldNews API: use source-countries/language. Use offset approximation for paging.
+    // WorldNews API: For 'search' use text=q, for 'top' approximate via category keyword or omit.
     const offset = (page - 1) * pageSize
     const params = new URLSearchParams({
-      'source-countries': country,
       language: 'en',
       number: String(pageSize),
       offset: String(offset),
     })
-    if (category && category !== 'all') params.set('text', category)
+    if (intent === 'search' && q) {
+      params.set('text', q)
+    } else if (category && category !== 'all') {
+      params.set('text', category)
+    }
+    // 'source-countries' can reduce diversity; only include if country seems specific (not 'us' generic search?). Keep simple: always include.
+    params.set('source-countries', country)
     params.set('api-key', p.key)
     return {
       url: `https://api.worldnewsapi.com/search-news?${params.toString()}`,
@@ -170,24 +185,45 @@ export function buildProviderRequest(p, intent, opts) {
 
 export async function tryProvidersSequential(providers, intent, opts, fetcher) {
   const errors = []
+  const attempts = []
+  const attemptsDetail = []
   if (!providers.length) throw new Error('No providers configured')
-  const start = providers.length > 1 ? Math.floor(Date.now() / 60000) % providers.length : 0
-  for (let i = 0; i < providers.length; i++) {
-    const p = providers[(start + i) % providers.length]
+  // Always prioritize 'newsdata' first if present, then follow declared order.
+  // This overrides the previous minute-based rotation so that NewsData gets first-request preference.
+  let ordered = providers
+  const preferredIdx = providers.findIndex((p) => p.type === 'newsdata')
+  if (preferredIdx > 0) {
+    ordered = [...providers]
+    const [preferred] = ordered.splice(preferredIdx, 1)
+    ordered.unshift(preferred)
+  }
+  for (let i = 0; i < ordered.length; i++) {
+    const p = ordered[i]
+    attempts.push(p.type)
     try {
       const req = buildProviderRequest(p, intent, opts)
       if (!req) throw new Error('Unsupported request for provider')
       const json = await fetcher(req.url, req.headers)
       const items = req.pick(json)
       if (Array.isArray(items) && items.length) {
-        return { items, provider: p.type, url: req.url, raw: json }
+        recordSuccess(p.type, items.length)
+        attemptsDetail.push(`${p.type}(ok:${items.length})`)
+        return { items, provider: p.type, url: req.url, raw: json, attempts, attemptsDetail }
       }
+      recordEmpty(p.type)
+      attemptsDetail.push(`${p.type}(empty)`) // treat as failure and continue
       throw new Error('Empty result')
     } catch (e) {
+      recordError(p.type, e?.message || String(e))
+      if (!attemptsDetail[attemptsDetail.length - 1]?.startsWith(p.type + '(')) {
+        attemptsDetail.push(`${p.type}(err)`) // only add if not already tagged as empty
+      }
       errors.push(`${p.type}: ${e?.message || e}`)
     }
   }
   const err = new Error(`All providers failed: ${errors.join(' | ')}`)
   err.details = errors
+  err.attempts = attempts
+  err.attemptsDetail = attemptsDetail
   throw err
 }
