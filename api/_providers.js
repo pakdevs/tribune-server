@@ -7,7 +7,8 @@ export function getProvidersForPK() {
   if (process.env.NEWSDATA_API) list.push({ type: 'newsdata', key: process.env.NEWSDATA_API })
   if (process.env.WORLD_NEWS_API) list.push({ type: 'worldnews', key: process.env.WORLD_NEWS_API })
   if (process.env.GNEWS_API) list.push({ type: 'gnews', key: process.env.GNEWS_API })
-  // Exclude NEWSAPI_ORG for PK per project note
+  // Fallback: use NewsAPI Everything search (q=Pakistan) when all PK-capable providers fail / are empty
+  if (process.env.NEWSAPI_ORG) list.push({ type: 'newsapi_pk', key: process.env.NEWSAPI_ORG })
   return list
 }
 
@@ -50,6 +51,38 @@ export function buildProviderRequest(p, intent, opts) {
         q,
         language: 'en',
         sortBy: 'publishedAt',
+        pageSize: String(pageSize),
+      })
+      return {
+        url: `https://newsapi.org/v2/everything?${params.toString()}`,
+        headers: { 'X-Api-Key': p.key },
+        pick: (data) => data?.articles || [],
+      }
+    }
+  }
+
+  if (p.type === 'newsapi_pk') {
+    if (intent === 'top') {
+      // Pakistan fallback: Everything search sorted by time
+      const params = new URLSearchParams({
+        q: 'Pakistan',
+        language: 'en',
+        sortBy: 'publishedAt',
+        page: String(page),
+        pageSize: String(pageSize),
+      })
+      return {
+        url: `https://newsapi.org/v2/everything?${params.toString()}`,
+        headers: { 'X-Api-Key': p.key },
+        pick: (data) => data?.articles || [],
+      }
+    }
+    if (intent === 'search' && q) {
+      const params = new URLSearchParams({
+        q,
+        language: 'en',
+        sortBy: 'publishedAt',
+        page: String(page),
         pageSize: String(pageSize),
       })
       return {

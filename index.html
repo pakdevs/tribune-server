@@ -88,11 +88,11 @@
         <ul>
           <li><a href="/api/world/category/business">/api/world/category/business</a></li>
           <li><a href="/api/world/category/entertainment">/api/world/category/entertainment</a></li>
-            <li><a href="/api/world/category/general">/api/world/category/general</a></li>
-            <li><a href="/api/world/category/health">/api/world/category/health</a></li>
-            <li><a href="/api/world/category/science">/api/world/category/science</a></li>
-            <li><a href="/api/world/category/sports">/api/world/category/sports</a></li>
-            <li><a href="/api/world/category/technology">/api/world/category/technology</a></li>
+          <li><a href="/api/world/category/general">/api/world/category/general</a></li>
+          <li><a href="/api/world/category/health">/api/world/category/health</a></li>
+          <li><a href="/api/world/category/science">/api/world/category/science</a></li>
+          <li><a href="/api/world/category/sports">/api/world/category/sports</a></li>
+          <li><a href="/api/world/category/technology">/api/world/category/technology</a></li>
         </ul>
         <p>Categories (Pakistan):</p>
         <ul>
@@ -110,7 +110,9 @@
           supports aliasing (politics/world → general, tech → technology, sci → science, biz →
           business). <br />• Pagination: <span class="mono">page</span> (>=1),
           <span class="mono">pageSize</span> (1–100). <br />• Multi-provider endpoints use keys from
-          environment variables and fallback between providers.
+          environment variables and fallback between providers. <br />• Pakistan endpoint will
+          fallback to a NewsAPI.org time-sorted search (q=Pakistan) if dedicated PK providers return
+          nothing.
         </p>
       </div>
     </div>
