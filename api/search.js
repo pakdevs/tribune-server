@@ -9,9 +9,14 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(204).end()
   const q = String(req.query.q || '').trim()
   if (!q) return res.status(200).json({ items: [] })
+  // Basic input validation
+  if (q.length < 2 || q.length > 128) {
+    return res.status(400).json({ error: 'Invalid query length' })
+  }
   const page = String(req.query.page || '1')
   const pageSize = String(req.query.pageSize || req.query.limit || '50')
-  const country = String(req.query.country || 'us')
+  let country = String(req.query.country || 'us').toLowerCase()
+  if (!/^[a-z]{2}$/i.test(country)) country = 'us'
   try {
     const cacheKey = makeKey(['search', q, country, page, pageSize])
     const noCache = String(req.query.nocache || '0') === '1'
@@ -65,21 +70,19 @@ export default async function handler(req, res) {
     res.setHeader('X-Provider-Articles', String(normalized.length))
     cache(res, 300, 60)
     if (String(req.query.debug) === '1') {
-      return res
-        .status(200)
-        .json({
-          items: normalized,
-          debug: {
-            provider: result.provider,
-            attempts: result.attempts,
-            attemptsDetail: result.attemptsDetail,
-            url: result.url,
-            cacheKey,
-            noCache,
-            q,
-            country,
-          },
-        })
+      return res.status(200).json({
+        items: normalized,
+        debug: {
+          provider: result.provider,
+          attempts: result.attempts,
+          attemptsDetail: result.attemptsDetail,
+          url: result.url,
+          cacheKey,
+          noCache,
+          q,
+          country,
+        },
+      })
     }
     return res.status(200).json({ items: normalized })
   } catch (e) {

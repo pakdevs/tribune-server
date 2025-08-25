@@ -9,9 +9,10 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(204).end()
   const page = String(req.query.page || '1')
   const pageSize = String(req.query.pageSize || req.query.limit || '50')
-  const country = String(req.query.country || 'us')
+  let country = String(req.query.country || 'us').toLowerCase()
+  if (!/^[a-z]{2}$/i.test(country)) country = 'us'
   try {
-  const cacheKey = makeKey(['world', 'top', country, page, pageSize])
+    const cacheKey = makeKey(['world', 'top', country, page, pageSize])
     const noCache = String(req.query.nocache || '0') === '1'
     if (!noCache) {
       const fresh = getFresh(cacheKey)
@@ -34,11 +35,8 @@ export default async function handler(req, res) {
     if (!flight) {
       flight = setInFlight(
         flightKey,
-        tryProvidersSequential(
-          providers,
-          'top',
-          { page, pageSize, country },
-          (url, headers) => upstreamJson(url, headers)
+        tryProvidersSequential(providers, 'top', { page, pageSize, country }, (url, headers) =>
+          upstreamJson(url, headers)
         )
       )
     }

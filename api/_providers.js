@@ -30,6 +30,11 @@ export function buildProviderRequest(p, intent, opts) {
   const pageSize = clamp(parseInt(opts.pageSize || '50', 10) || 50, 1, 100)
   const country = String(opts.country || 'us')
   const q = opts.q ? String(opts.q) : undefined
+  const domains = Array.isArray(opts.domains)
+    ? opts.domains.filter(Boolean)
+    : opts.domains
+    ? [String(opts.domains)]
+    : []
   const category = opts.category ? String(opts.category).toLowerCase() : undefined
 
   if (p.type === 'newsapi') {
@@ -54,7 +59,9 @@ export function buildProviderRequest(p, intent, opts) {
         language: 'en',
         sortBy: 'publishedAt',
         pageSize: String(pageSize),
+        page: String(page),
       })
+      if (domains && domains.length) params.set('domains', domains.join(','))
       return {
         url: `https://newsapi.org/v2/everything?${params.toString()}`,
         headers: { 'X-Api-Key': p.key },
@@ -141,6 +148,7 @@ export function buildProviderRequest(p, intent, opts) {
     // NewsData.io: use /latest for 'top', /news (search) when q provided.
     if (intent === 'search' && q) {
       const params = new URLSearchParams({ q, language: 'en', page: String(page) })
+      if (domains && domains.length) params.set('domain', domains.join(','))
       params.set('apikey', p.key)
       return {
         url: `https://newsdata.io/api/1/news?${params.toString()}`,
