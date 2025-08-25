@@ -1,6 +1,9 @@
 {
   "version": 2,
-  "routes": [{ "src": "/", "dest": "/index.html" }],
+  "routes": [
+    { "src": "^/$", "dest": "/index.html" },
+    { "src": "^(?!/api/).*", "dest": "/index.html" }
+  ],
   "functions": {
     "api/**/*.js": {
       "runtime": "@vercel/node@5.3.11"

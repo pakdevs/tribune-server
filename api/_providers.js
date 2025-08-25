@@ -129,8 +129,14 @@ export function buildProviderRequest(p, intent, opts) {
       }
     }
     if (intent === 'search' && q) {
+      // If a specific domain is hinted, bias GNews query using site:domain to improve precision
+      let gq = q
+      if (domains && domains.length) {
+        const dom = String(domains[0]).replace(/^www\./, '')
+        if (dom) gq = `${q} site:${dom}`
+      }
       const params = new URLSearchParams({
-        q,
+        q: gq,
         lang: 'en',
         max: String(pageSize),
         page: String(page),

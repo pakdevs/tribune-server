@@ -84,6 +84,45 @@
             >
           </li>
         </ul>
+        <p><strong>Source endpoints</strong></p>
+        <p class="muted">General format:</p>
+        <ul>
+          <li>
+            <code class="mono">/api/world/source/{slug}?name=...&amp;domain=...</code>
+          </li>
+          <li>
+            <code class="mono">/api/pk/source/{slug}?name=...&amp;domain=...</code>
+          </li>
+        </ul>
+        <p><strong>World sources (examples)</strong></p>
+        <ul>
+          <li><a href="/api/world/source/cnn?name=CNN&domain=cnn.com">CNN</a></li>
+          <li><a href="/api/world/source/reuters?name=Reuters&domain=reuters.com">Reuters</a></li>
+          <li>
+            <a href="/api/world/source/ap?name=Associated%20Press&domain=apnews.com">AP</a>
+          </li>
+          <li>
+            <a href="/api/world/source/bbc-news?name=BBC%20News&domain=bbc.com">BBC News</a>
+          </li>
+          <li>
+            <a href="/api/world/source/the-guardian?name=The%20Guardian&domain=theguardian.com"
+              >The Guardian</a
+            >
+          </li>
+        </ul>
+        <p><strong>Pakistan sources (examples)</strong></p>
+        <ul>
+          <li><a href="/api/pk/source/dawn?name=Dawn&domain=dawn.com">Dawn</a></li>
+          <li><a href="/api/pk/source/geo-news?name=Geo%20News&domain=geo.tv">Geo News</a></li>
+          <li>
+            <a href="/api/pk/source/express-tribune?name=Express%20Tribune&domain=tribune.com.pk"
+              >Express Tribune</a
+            >
+          </li>
+          <li>
+            <a href="/api/pk/source/the-news?name=The%20News&domain=thenews.com.pk">The News</a>
+          </li>
+        </ul>
         <p><strong>Categories (World)</strong></p>
         <ul>
           <li><a href="/api/world/category/business">/api/world/category/business</a></li>
@@ -109,8 +148,8 @@
           <br />• Category aliases: politics/world → general, tech → technology, sci → science, biz
           → business. <br />• Pagination: page (>=1), pageSize (1–100). <br />• Provider fallback &
           rotation reduce rate-limit impact. <br />• PK endpoint final fallback: NewsAPI Everything
-          (q=Pakistan). <br />• Add <code>?debug=1</code> to any endpoint (dev only) to inspect
-          upstream provider.
+          (q=Pakistan). <br />• For testing add <code>?debug=1&amp;nocache=1</code> to view provider
+          attempts and bypass cache.
         </p>
       </div>
     </div>

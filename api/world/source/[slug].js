@@ -29,11 +29,15 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Missing source identifier' })
   }
 
-  // Compose a query that most providers can work with; providers lacking domain filters will still return relevant matches via name
-  const qParts = []
-  if (name) qParts.push(`"${name}"`)
-  if (domain) qParts.push(domain)
-  const q = qParts.length ? qParts.join(' OR ') : slug
+  // Always provide a query for providers that require it (e.g., GNews/NewsAPI),
+  // while also sending domain hints where supported. We'll still filter by domain/slug/name later.
+  // Prefer exact phrase on name when available; otherwise fall back to slug.
+  let q = name ? `"${name}"` : slug
+  if (!q && domain) {
+    // derive a lightweight token from domain (cnn.com -> cnn)
+    const base = domain.split('.')
+    if (base.length) q = base[0]
+  }
 
   try {
     const cacheKey = makeKey(['source', 'world', slug, domain, name, country, page, pageSize])
@@ -73,6 +77,16 @@ export default async function handler(req, res) {
           const targetSlug = slug
           const targetDomain = domain
           const nameLower = name.toLowerCase()
+          const getHost = (u = '') => {
+            try {
+              const s = String(u)
+              const i = s.indexOf('://')
+              const x = i > -1 ? s.slice(i + 3) : s
+              return x.split('/')[0].replace(/^www\./, '')
+            } catch {
+              return ''
+            }
+          }
           for (const p of ordered) {
             attempts.push(p.type)
             try {
@@ -105,7 +119,12 @@ export default async function handler(req, res) {
                 const domainMatch = targetDomain && aDomain ? aDomain.endsWith(targetDomain) : false
                 const slugMatch = targetSlug && aSlug ? aSlug === targetSlug : false
                 const nameMatch = nameLower ? aName.toLowerCase().includes(nameLower) : false
-                return (domain ? domainMatch : false) || slugMatch || nameMatch
+                let linkMatch = false
+                if (targetDomain) {
+                  const linkHost = getHost(a?.link || a?.url || '')
+                  if (linkHost) linkMatch = linkHost.toLowerCase().endsWith(targetDomain)
+                }
+                return (domain ? domainMatch : false) || slugMatch || nameMatch || linkMatch
               })
               if (filtered.length) {
                 attemptsDetail.push(`${p.type}(ok:${filtered.length})`)

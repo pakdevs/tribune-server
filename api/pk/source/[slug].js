@@ -28,10 +28,12 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Missing source identifier' })
   }
 
-  const qParts = []
-  if (name) qParts.push(`"${name}"`)
-  if (domain) qParts.push(domain)
-  const q = qParts.length ? qParts.join(' OR ') : slug
+  // Always pass a non-empty q for providers that require it, even if we also pass domain filters.
+  let q = name ? `"${name}"` : slug
+  if (!q && domain) {
+    const base = domain.split('.')
+    if (base.length) q = base[0]
+  }
 
   try {
     const cacheKey = makeKey(['source', 'pk', slug, domain, name, country, page, pageSize])
@@ -70,6 +72,16 @@ export default async function handler(req, res) {
           const targetSlug = slug
           const targetDomain = domain
           const nameLower = name.toLowerCase()
+          const getHost = (u = '') => {
+            try {
+              const s = String(u)
+              const i = s.indexOf('://')
+              const x = i > -1 ? s.slice(i + 3) : s
+              return x.split('/')[0].replace(/^www\./, '')
+            } catch {
+              return ''
+            }
+          }
           for (const p of ordered) {
             attempts.push(p.type)
             try {
@@ -101,7 +113,12 @@ export default async function handler(req, res) {
                 const domainMatch = targetDomain && aDomain ? aDomain.endsWith(targetDomain) : false
                 const slugMatch = targetSlug && aSlug ? aSlug === targetSlug : false
                 const nameMatch = nameLower ? aName.toLowerCase().includes(nameLower) : false
-                return (domain ? domainMatch : false) || slugMatch || nameMatch
+                let linkMatch = false
+                if (targetDomain) {
+                  const linkHost = getHost(a?.link || a?.url || '')
+                  if (linkHost) linkMatch = linkHost.toLowerCase().endsWith(targetDomain)
+                }
+                return (domain ? domainMatch : false) || slugMatch || nameMatch || linkMatch
               })
               if (filtered.length) {
                 attemptsDetail.push(`${p.type}(ok:${filtered.length})`)
