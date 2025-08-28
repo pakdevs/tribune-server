@@ -5,7 +5,7 @@
     { "src": "^(?!/api/).*", "dest": "/index.html" }
   ],
   "functions": {
-    "api/**/*.js": {
+    "api/**/*.(js|ts)": {
       "runtime": "@vercel/node@5.3.11"
     }
   }

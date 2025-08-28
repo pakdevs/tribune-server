@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { normalize } from '../api/_normalize.js'
+import { normalize } from '../api/_normalize.ts'
 
 const sample = {
   title: 'Hello',

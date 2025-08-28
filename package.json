@@ -9,7 +9,9 @@
   "scripts": {
     "lint": "eslint api --ext .js",
     "format": "prettier --write \"**/*.{js,json,md}\"",
-    "test": "node --test tests/*.mjs"
+    "test": "tsx --test tests/*.mjs"
   },
-  "dependencies": {}
+  "devDependencies": {
+    "tsx": "^4.20.5"
+  }
 }
