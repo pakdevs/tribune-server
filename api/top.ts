@@ -25,13 +25,15 @@ export default async function handler(req: any, res: any) {
   cors(res)
   if (req.method === 'OPTIONS') return res.status(204).end()
   const country = String(req.query.country || 'us')
-  const page = String(req.query.page || '1')
-  const pageSize = String(req.query.pageSize || req.query.limit || '50')
+  const rawPage = String(req.query.page || '1')
+  const rawPageSize = String(req.query.pageSize || req.query.limit || '50')
+  const pageNum = Math.max(1, parseInt(rawPage, 10) || 1)
+  const pageSizeNum = Math.min(100, Math.max(1, parseInt(rawPageSize, 10) || 50))
   const rawCategory = req.query.category ? String(req.query.category).toLowerCase() : 'general'
   const mapped = rawCategory ? alias[rawCategory] || rawCategory : 'general'
   const category = allowed.has(mapped) ? mapped : 'general'
   try {
-    const cacheKey = makeKey(['top', country, category, page, pageSize])
+    const cacheKey = makeKey(['top', country, category, String(pageNum), String(pageSizeNum)])
     const noCache = String(req.query.nocache || '0') === '1'
     if (!noCache) {
       const fresh = getFresh(cacheKey)
@@ -48,7 +50,7 @@ export default async function handler(req: any, res: any) {
     }
     res.setHeader('X-Cache', 'MISS')
     const providers = getProvidersForWorld()
-    const flightKey = `top:${country}:${category}:${page}:${pageSize}`
+    const flightKey = `top:${country}:${category}:${String(pageNum)}:${String(pageSizeNum)}`
     let flight = getInFlight(flightKey)
     if (!flight) {
       flight = setInFlight(
@@ -56,7 +58,7 @@ export default async function handler(req: any, res: any) {
         tryProvidersSequential(
           providers,
           'top',
-          { page, pageSize, country, category },
+          { page: pageNum, pageSize: pageSizeNum, country, category },
           (url, headers) => upstreamJson(url, headers)
         )
       )
@@ -95,12 +97,14 @@ export default async function handler(req: any, res: any) {
     return res.status(200).json({ items: normalized })
   } catch (e: any) {
     const country = String(req.query.country || 'us')
-    const page = String(req.query.page || '1')
-    const pageSize = String(req.query.pageSize || req.query.limit || '50')
+    const rawPage = String(req.query.page || '1')
+    const rawPageSize = String(req.query.pageSize || req.query.limit || '50')
+    const pageNum = Math.max(1, parseInt(rawPage, 10) || 1)
+    const pageSizeNum = Math.min(100, Math.max(1, parseInt(rawPageSize, 10) || 50))
     const rawCategory = req.query.category ? String(req.query.category).toLowerCase() : 'general'
     const mapped = rawCategory ? alias[rawCategory] || rawCategory : 'general'
     const category = allowed.has(mapped) ? mapped : 'general'
-    const cacheKey = makeKey(['top', country, category, page, pageSize])
+    const cacheKey = makeKey(['top', country, category, String(pageNum), String(pageSizeNum)])
     const stale = getStale(cacheKey)
     if (stale) {
       res.setHeader('X-Cache', 'STALE')

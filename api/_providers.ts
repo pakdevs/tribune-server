@@ -120,13 +120,8 @@ export function buildProviderRequest(p: any, intent: 'top' | 'search', opts: any
       }
     }
     if (intent === 'search' && q) {
-      let gq = q
-      if (domains && domains.length) {
-        const dom = String(domains[0]).replace(/^www\./, '')
-        if (dom) gq = `${q} site:${dom}`
-      }
       const params = new URLSearchParams({
-        q: gq,
+        q,
         lang: 'en',
         // pass through country to narrow sources by origin when available (e.g., pk)
         country,

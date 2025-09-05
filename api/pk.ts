@@ -7,11 +7,13 @@ import { getInFlight, setInFlight } from './_inflight.js'
 export default async function handler(req: any, res: any) {
   cors(res)
   if (req.method === 'OPTIONS') return res.status(204).end()
-  const page = String(req.query.page || '1')
-  const pageSize = String(req.query.pageSize || req.query.limit || '50')
+  const rawPage = String(req.query.page || '1')
+  const rawPageSize = String(req.query.pageSize || req.query.limit || '50')
+  const pageNum = Math.max(1, parseInt(rawPage, 10) || 1)
+  const pageSizeNum = Math.min(100, Math.max(1, parseInt(rawPageSize, 10) || 50))
   const country = 'pk'
   try {
-    const cacheKey = makeKey(['pk', 'top', country, page, pageSize])
+    const cacheKey = makeKey(['pk', 'top', country, String(pageNum), String(pageSizeNum)])
     const noCache = String(req.query.nocache || '0') === '1'
     if (!noCache) {
       const fresh = getFresh(cacheKey)
@@ -29,13 +31,16 @@ export default async function handler(req: any, res: any) {
     // Miss path: attempt providers with in-flight dedupe
     res.setHeader('X-Cache', 'MISS')
     const providers = getProvidersForPK()
-    const flightKey = `pk:${country}:${page}:${pageSize}`
+    const flightKey = `pk:${country}:${String(pageNum)}:${String(pageSizeNum)}`
     let flight = getInFlight(flightKey)
     if (!flight) {
       flight = setInFlight(
         flightKey,
-        tryProvidersSequential(providers, 'top', { page, pageSize, country }, (url, headers) =>
-          upstreamJson(url, headers)
+        tryProvidersSequential(
+          providers,
+          'top',
+          { page: pageNum, pageSize: pageSizeNum, country },
+          (url, headers) => upstreamJson(url, headers)
         )
       )
     }
@@ -73,7 +78,7 @@ export default async function handler(req: any, res: any) {
     const page = String(req.query.page || '1')
     const pageSize = String(req.query.pageSize || req.query.limit || '50')
     const country = 'pk'
-    const cacheKey = makeKey(['pk', 'top', country, page, pageSize])
+    const cacheKey = makeKey(['pk', 'top', country, String(pageNum), String(pageSizeNum)])
     const stale = getStale(cacheKey)
     if (stale) {
       res.setHeader('X-Cache', 'STALE')

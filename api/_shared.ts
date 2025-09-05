@@ -24,8 +24,16 @@ export function cache(res: any, seconds = 300, swr = 60) {
   res.setHeader('Cache-Control', `s-maxage=${seconds}, stale-while-revalidate=${swr}`)
 }
 
-export async function upstreamJson(url: string, headers: Record<string, string> = {}) {
-  const r = await fetch(url, { headers })
+export async function upstreamJson(
+  url: string,
+  headers: Record<string, string> = {},
+  timeoutMs = 8000
+) {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+  const r = await fetch(url, { headers, signal: controller.signal }).finally(() =>
+    clearTimeout(timeoutId)
+  )
   if (!r.ok) throw new Error(`Upstream ${r.status}`)
   return r.json()
 }

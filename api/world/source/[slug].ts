@@ -15,27 +15,29 @@ export default async function handler(req: any, res: any) {
   if (req.method === 'OPTIONS') return res.status(204).end()
   const slug = slugify(req.query.slug || '')
   const name = String(req.query.name || '').trim()
-  const domain = String(req.query.domain || '')
-    .trim()
-    .toLowerCase()
-    .replace(/^www\./, '')
-  const page = String(req.query.page || '1')
-  const pageSize = String(req.query.pageSize || req.query.limit || '50')
+  const rawPage = String(req.query.page || '1')
+  const rawPageSize = String(req.query.pageSize || req.query.limit || '50')
+  const pageNum = Math.max(1, parseInt(rawPage, 10) || 1)
+  const pageSizeNum = Math.min(100, Math.max(1, parseInt(rawPageSize, 10) || 50))
   let country = String(req.query.country || 'us').toLowerCase()
   if (!/^[a-z]{2}$/i.test(country)) country = 'us'
 
-  if (!slug && !name && !domain) {
+  if (!slug && !name) {
     return res.status(400).json({ error: 'Missing source identifier' })
   }
 
   let q = name ? `"${name}"` : slug
-  if (!q && domain) {
-    const base = domain.split('.')
-    if (base.length) q = base[0]
-  }
 
   try {
-    const cacheKey = makeKey(['source', 'world', slug, domain, name, country, page, pageSize])
+    const cacheKey = makeKey([
+      'source',
+      'world',
+      slug,
+      name,
+      country,
+      String(pageNum),
+      String(pageSizeNum),
+    ])
     const noCache = String(req.query.nocache || '0') === '1'
     if (!noCache) {
       const fresh = getFresh(cacheKey)
@@ -53,7 +55,9 @@ export default async function handler(req: any, res: any) {
 
     res.setHeader('X-Cache', 'MISS')
     const providers = getProvidersForWorld()
-    const flightKey = `source:world:${slug}:${domain}:${name}:${country}:${page}:${pageSize}`
+    const flightKey = `source:world:${slug}:${name}:${country}:${String(pageNum)}:${String(
+      pageSizeNum
+    )}`
     let flight = getInFlight(flightKey)
     if (!flight) {
       flight = setInFlight(
@@ -69,36 +73,32 @@ export default async function handler(req: any, res: any) {
           const attempts: string[] = []
           const attemptsDetail: string[] = []
           const targetSlug = slug
-          const targetDomain = domain
           const nameLower = name.toLowerCase()
-          const getHost = (u = '') => {
-            try {
-              const s = String(u)
-              const i = s.indexOf('://')
-              const x = i > -1 ? s.slice(i + 3) : s
-              return x.split('/')[0].replace(/^www\./, '')
-            } catch {
-              return ''
-            }
-          }
           for (const p of ordered) {
             attempts.push(p.type)
             try {
               const reqSpec = buildProviderRequest(p, 'search', {
-                page,
-                pageSize,
+                page: pageNum,
+                pageSize: pageSizeNum,
                 country,
                 q,
-                domains: targetDomain ? [targetDomain] : [],
+                domains: [],
               })
               if (!reqSpec) {
                 attemptsDetail.push(`${p.type}(unsupported)`)
                 continue
               }
-              const json = await fetch(reqSpec.url, { headers: reqSpec.headers }).then((r) => {
-                if (!r.ok) throw new Error('Upstream ' + r.status)
-                return r.json()
+              const controller = new AbortController()
+              const timeoutId = setTimeout(() => controller.abort(), 8000)
+              const json = await fetch(reqSpec.url, {
+                headers: reqSpec.headers,
+                signal: controller.signal,
               })
+                .then((r) => {
+                  if (!r.ok) throw new Error('Upstream ' + r.status)
+                  return r.json()
+                })
+                .finally(() => clearTimeout(timeoutId))
               const items = reqSpec.pick(json)
               if (!Array.isArray(items) || !items.length) {
                 attemptsDetail.push(`${p.type}(empty)`)
@@ -106,18 +106,11 @@ export default async function handler(req: any, res: any) {
               }
               const normalized = items.map(normalize).filter(Boolean)
               const filtered = normalized.filter((a: any) => {
-                const aDomain = (a?.sourceDomain || '').toLowerCase()
                 const aName = String(a?.displaySourceName || a?.sourceName || '').trim()
                 const aSlug = slugify(aName)
-                const domainMatch = targetDomain && aDomain ? aDomain.endsWith(targetDomain) : false
                 const slugMatch = targetSlug && aSlug ? aSlug === targetSlug : false
                 const nameMatch = nameLower ? aName.toLowerCase().includes(nameLower) : false
-                let linkMatch = false
-                if (targetDomain) {
-                  const linkHost = getHost(a?.link || a?.url || '')
-                  if (linkHost) linkMatch = linkHost.toLowerCase().endsWith(targetDomain)
-                }
-                return (domain ? domainMatch : false) || slugMatch || nameMatch || linkMatch
+                return slugMatch || nameMatch
               })
               if (filtered.length) {
                 attemptsDetail.push(`${p.type}(ok:${filtered.length})`)
@@ -161,13 +154,20 @@ export default async function handler(req: any, res: any) {
           q,
           country,
           slug,
-          domain,
         },
       })
     }
     return res.status(200).json({ items: result.items })
   } catch (e: any) {
-    const cacheKey = makeKey(['source', 'world', slug, domain, name, country, page, pageSize])
+    const cacheKey = makeKey([
+      'source',
+      'world',
+      slug,
+      name,
+      country,
+      String(pageNum),
+      String(pageSizeNum),
+    ])
     const stale = getStale(cacheKey)
     if (stale) {
       res.setHeader('X-Cache', 'STALE')

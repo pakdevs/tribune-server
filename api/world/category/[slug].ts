@@ -26,11 +26,20 @@ export default async function handler(req: any, res: any) {
   const mapped = rawSlug ? alias[rawSlug] || rawSlug : 'general'
   const category = allowed.has(mapped) ? mapped : 'general'
 
-  const page = String(req.query.page || '1')
-  const pageSize = String(req.query.pageSize || req.query.limit || '50')
+  const rawPage = String(req.query.page || '1')
+  const rawPageSize = String(req.query.pageSize || req.query.limit || '50')
+  const pageNum = Math.max(1, parseInt(rawPage, 10) || 1)
+  const pageSizeNum = Math.min(100, Math.max(1, parseInt(rawPageSize, 10) || 50))
   const country = String(req.query.country || 'us')
   try {
-    const cacheKey = makeKey(['world', 'cat', category, country, page, pageSize])
+    const cacheKey = makeKey([
+      'world',
+      'cat',
+      category,
+      country,
+      String(pageNum),
+      String(pageSizeNum),
+    ])
     const noCache = String(req.query.nocache || '0') === '1'
     if (!noCache) {
       const fresh = getFresh(cacheKey)
@@ -50,7 +59,7 @@ export default async function handler(req: any, res: any) {
     const result = await tryProvidersSequential(
       providers,
       'top',
-      { page, pageSize, country, category },
+      { page: pageNum, pageSize: pageSizeNum, country, category },
       (url, headers) => upstreamJson(url, headers)
     )
     const normalized = result.items.map(normalize).filter(Boolean)
@@ -84,7 +93,14 @@ export default async function handler(req: any, res: any) {
     }
     return res.status(200).json({ items: normalized })
   } catch (e: any) {
-    const cacheKey = makeKey(['world', 'cat', category, country, page, pageSize])
+    const cacheKey = makeKey([
+      'world',
+      'cat',
+      category,
+      country,
+      String(pageNum),
+      String(pageSizeNum),
+    ])
     const stale = getStale(cacheKey)
     if (stale) {
       res.setHeader('X-Cache', 'STALE')
