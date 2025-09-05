@@ -4,15 +4,17 @@ const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(mi
 
 export function getProvidersForPK() {
   const list: Array<{ type: string; key: string }> = []
-  if ((process as any).env.GNEWS_API)
-    list.push({ type: 'gnews', key: (process as any).env.GNEWS_API })
+  // Prefer NewsAPI: Pakistan is not a supported country for top-headlines, so use a Pakistan-focused Everything query
+  if ((process as any).env.NEWSAPI_KEY)
+    list.push({ type: 'newsapi_pk', key: (process as any).env.NEWSAPI_KEY })
   return list
 }
 
 export function getProvidersForWorld() {
   const list: Array<{ type: string; key: string }> = []
-  if ((process as any).env.GNEWS_API)
-    list.push({ type: 'gnews', key: (process as any).env.GNEWS_API })
+  // Prefer NewsAPI for world headlines and search
+  if ((process as any).env.NEWSAPI_KEY)
+    list.push({ type: 'newsapi', key: (process as any).env.NEWSAPI_KEY })
   return list
 }
 
@@ -26,6 +28,8 @@ export function buildProviderRequest(p: any, intent: 'top' | 'search', opts: any
     : opts.domains
     ? [String(opts.domains)]
     : []
+  // Note: NewsAPI Everything does not support `sources` param (only Top Headlines does),
+  // so we ignore opts.sources for Everything requests and rely on domains + q instead.
   const category: string | undefined = opts.category
     ? String(opts.category).toLowerCase()
     : undefined
@@ -55,6 +59,8 @@ export function buildProviderRequest(p: any, intent: 'top' | 'search', opts: any
         page: String(page),
       })
       if (domains && domains.length) params.set('domains', domains.join(','))
+      if (opts.from) params.set('from', String(opts.from))
+      if (opts.to) params.set('to', String(opts.to))
       return {
         url: `https://newsapi.org/v2/everything?${params.toString()}`,
         headers: { 'X-Api-Key': p.key },
@@ -66,12 +72,16 @@ export function buildProviderRequest(p: any, intent: 'top' | 'search', opts: any
   if (p.type === 'newsapi_pk') {
     if (intent === 'top') {
       const params = new URLSearchParams({
-        q: 'Pakistan',
+        q:
+          opts.category && String(opts.category).toLowerCase() !== 'general'
+            ? `Pakistan ${String(opts.category)}`
+            : 'Pakistan',
         language: 'en',
         sortBy: 'publishedAt',
         page: String(page),
         pageSize: String(pageSize),
       })
+      if (domains && domains.length) params.set('domains', domains.join(','))
       return {
         url: `https://newsapi.org/v2/everything?${params.toString()}`,
         headers: { 'X-Api-Key': p.key },
@@ -86,102 +96,18 @@ export function buildProviderRequest(p: any, intent: 'top' | 'search', opts: any
         page: String(page),
         pageSize: String(pageSize),
       })
-      return {
-        url: `https://newsapi.org/v2/everything?${params.toString()}`,
-        headers: { 'X-Api-Key': p.key },
-        pick: (data: any) => data?.articles || [],
-      }
-    }
-  }
-
-  if (p.type === 'gnews') {
-    if (intent === 'top') {
-      const params = new URLSearchParams({
-        lang: 'en',
-        country,
-        max: String(pageSize),
-        page: String(page),
-      })
-      const topicMap: Record<string, string> = {
-        business: 'business',
-        entertainment: 'entertainment',
-        technology: 'technology',
-        sports: 'sports',
-        science: 'science',
-        health: 'health',
-        general: 'world',
-      }
-      if (category && topicMap[category]) params.set('topic', topicMap[category])
-      params.set('apikey', p.key)
-      return {
-        url: `https://gnews.io/api/v4/top-headlines?${params.toString()}`,
-        headers: {},
-        pick: (data: any) => data?.articles || [],
-      }
-    }
-    if (intent === 'search' && q) {
-      const params = new URLSearchParams({
-        q,
-        lang: 'en',
-        // pass through country to narrow sources by origin when available (e.g., pk)
-        country,
-        max: String(pageSize),
-        page: String(page),
-      })
-      // prefer latest results first
-      params.set('sortby', 'publishedAt')
+      if (domains && domains.length) params.set('domains', domains.join(','))
       if (opts.from) params.set('from', String(opts.from))
       if (opts.to) params.set('to', String(opts.to))
-      params.set('apikey', p.key)
       return {
-        url: `https://gnews.io/api/v4/search?${params.toString()}`,
-        headers: {},
+        url: `https://newsapi.org/v2/everything?${params.toString()}`,
+        headers: { 'X-Api-Key': p.key },
         pick: (data: any) => data?.articles || [],
       }
     }
   }
 
-  if (p.type === 'newsdata') {
-    if (intent === 'search' && q) {
-      const params = new URLSearchParams({ q, language: 'en', page: String(page) })
-      if (domains && domains.length) params.set('domain', domains.join(','))
-      params.set('apikey', p.key)
-      return {
-        url: `https://newsdata.io/api/1/news?${params.toString()}`,
-        headers: {},
-        pick: (data: any) => data?.results || data?.articles || [],
-      }
-    }
-    const params = new URLSearchParams({ country, language: 'en', page: String(page) })
-    if (category && category !== 'all') params.set('category', category)
-    params.set('apikey', p.key)
-    return {
-      url: `https://newsdata.io/api/1/latest?${params.toString()}`,
-      headers: {},
-      pick: (data: any) => data?.results || data?.articles || [],
-    }
-  }
-
-  if (p.type === 'worldnews') {
-    const offset = (page - 1) * pageSize
-    const params = new URLSearchParams({
-      language: 'en',
-      number: String(pageSize),
-      offset: String(offset),
-    })
-    if (intent === 'search' && q) {
-      params.set('text', q)
-    } else if (category && category !== 'all') {
-      params.set('text', category)
-    }
-    params.set('source-countries', country)
-    params.set('api-key', p.key)
-    return {
-      url: `https://api.worldnewsapi.com/search-news?${params.toString()}`,
-      headers: {},
-      pick: (data: any) => data?.news || data?.articles || [],
-    }
-  }
+  // Only NewsAPI providers are supported at this time.
 
   return null
 }
@@ -196,13 +122,8 @@ export async function tryProvidersSequential(
   const attempts: string[] = []
   const attemptsDetail: string[] = []
   if (!providers.length) throw new Error('No providers configured')
+  // Use providers as supplied by getProviders* (no special-casing GNews)
   let ordered = providers
-  const preferredIdx = providers.findIndex((p) => p.type === 'gnews')
-  if (preferredIdx > 0) {
-    ordered = [...providers]
-    const [preferred] = ordered.splice(preferredIdx, 1)
-    ordered.unshift(preferred)
-  }
   for (let i = 0; i < ordered.length; i++) {
     const p = ordered[i]
     attempts.push(p.type)

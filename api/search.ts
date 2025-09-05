@@ -16,10 +16,27 @@ export default async function handler(req: any, res: any) {
   const rawPageSize = String(req.query.pageSize || req.query.limit || '50')
   const pageNum = Math.max(1, parseInt(rawPage, 10) || 1)
   const pageSizeNum = Math.min(100, Math.max(1, parseInt(rawPageSize, 10) || 50))
+  const domains = req.query.domains
+    ? String(req.query.domains)
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : undefined
+  const from = req.query.from ? String(req.query.from) : undefined
+  const to = req.query.to ? String(req.query.to) : undefined
   let country = String(req.query.country || 'us').toLowerCase()
   if (!/^[a-z]{2}$/i.test(country)) country = 'us'
   try {
-    const cacheKey = makeKey(['search', q, country, String(pageNum), String(pageSizeNum)])
+    const cacheKey = makeKey([
+      'search',
+      q,
+      country,
+      String(pageNum),
+      String(pageSizeNum),
+      domains?.join(',') || '',
+      from || '',
+      to || '',
+    ])
     const noCache = String(req.query.nocache || '0') === '1'
     if (!noCache) {
       const fresh = getFresh(cacheKey)
@@ -36,7 +53,9 @@ export default async function handler(req: any, res: any) {
     }
     res.setHeader('X-Cache', 'MISS')
     const providers = getProvidersForWorld()
-    const flightKey = `search:${q}:${country}:${String(pageNum)}:${String(pageSizeNum)}`
+    const flightKey = `search:${q}:${country}:${String(pageNum)}:${String(pageSizeNum)}:${
+      domains?.join(',') || ''
+    }:${from || ''}:${to || ''}`
     let flight = getInFlight(flightKey)
     if (!flight) {
       flight = setInFlight(
@@ -44,7 +63,7 @@ export default async function handler(req: any, res: any) {
         tryProvidersSequential(
           providers,
           'search',
-          { page: pageNum, pageSize: pageSizeNum, country, q },
+          { page: pageNum, pageSize: pageSizeNum, country, q, domains, from, to },
           (url, headers) => upstreamJson(url, headers)
         )
       )

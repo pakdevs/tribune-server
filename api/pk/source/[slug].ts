@@ -15,6 +15,7 @@ export default async function handler(req: any, res: any) {
   if (req.method === 'OPTIONS') return res.status(204).end()
   const slug = slugify(req.query.slug || '')
   const name = String(req.query.name || '').trim()
+  const domain = req.query.domain ? String(req.query.domain).trim() : ''
   const rawPage = String(req.query.page || '1')
   const rawPageSize = String(req.query.pageSize || req.query.limit || '50')
   const pageNum = Math.max(1, parseInt(rawPage, 10) || 1)
@@ -35,6 +36,7 @@ export default async function handler(req: any, res: any) {
       'pk',
       slug,
       name,
+      domain || '',
       country,
       String(pageNum),
       String(pageSizeNum),
@@ -58,21 +60,15 @@ export default async function handler(req: any, res: any) {
 
     res.setHeader('X-Cache', 'MISS')
     const providers = getProvidersForPK()
-    const flightKey = `source:pk:${slug}:${name}:${country}:${String(pageNum)}:${String(
-      pageSizeNum
-    )}:${from || ''}:${to || ''}`
+    const flightKey = `source:pk:${slug}:${name}:${domain || ''}:${country}:${String(
+      pageNum
+    )}:${String(pageSizeNum)}:${from || ''}:${to || ''}`
     let flight = getInFlight(flightKey)
     if (!flight) {
       flight = setInFlight(
         flightKey,
         (async () => {
           let ordered = providers
-          const preferredIdx = providers.findIndex((p) => p.type === 'gnews')
-          if (preferredIdx > 0) {
-            ordered = [...providers]
-            const [preferred] = ordered.splice(preferredIdx, 1)
-            ordered.unshift(preferred)
-          }
           const attempts: string[] = []
           const attemptsDetail: string[] = []
           const targetSlug = slug
@@ -85,7 +81,7 @@ export default async function handler(req: any, res: any) {
                 pageSize: pageSizeNum,
                 country,
                 q,
-                domains: [],
+                domains: domain ? [domain] : [],
                 from,
                 to,
               })
