@@ -128,6 +128,10 @@ export function buildProviderRequest(p: any, intent: 'top' | 'search', opts: any
         max: String(pageSize),
         page: String(page),
       })
+      // prefer latest results first
+      params.set('sortby', 'publishedAt')
+      if (opts.from) params.set('from', String(opts.from))
+      if (opts.to) params.set('to', String(opts.to))
       params.set('apikey', p.key)
       return {
         url: `https://gnews.io/api/v4/search?${params.toString()}`,

@@ -19,6 +19,8 @@ export default async function handler(req: any, res: any) {
   const rawPageSize = String(req.query.pageSize || req.query.limit || '50')
   const pageNum = Math.max(1, parseInt(rawPage, 10) || 1)
   const pageSizeNum = Math.min(100, Math.max(1, parseInt(rawPageSize, 10) || 50))
+  const from = req.query.from ? String(req.query.from) : undefined
+  const to = req.query.to ? String(req.query.to) : undefined
   let country = String(req.query.country || 'us').toLowerCase()
   if (!/^[a-z]{2}$/i.test(country)) country = 'us'
 
@@ -37,6 +39,8 @@ export default async function handler(req: any, res: any) {
       country,
       String(pageNum),
       String(pageSizeNum),
+      from || '',
+      to || '',
     ])
     const noCache = String(req.query.nocache || '0') === '1'
     if (!noCache) {
@@ -57,7 +61,7 @@ export default async function handler(req: any, res: any) {
     const providers = getProvidersForWorld()
     const flightKey = `source:world:${slug}:${name}:${country}:${String(pageNum)}:${String(
       pageSizeNum
-    )}`
+    )}:${from || ''}:${to || ''}`
     let flight = getInFlight(flightKey)
     if (!flight) {
       flight = setInFlight(
@@ -83,6 +87,8 @@ export default async function handler(req: any, res: any) {
                 country,
                 q,
                 domains: [],
+                from,
+                to,
               })
               if (!reqSpec) {
                 attemptsDetail.push(`${p.type}(unsupported)`)
@@ -167,6 +173,8 @@ export default async function handler(req: any, res: any) {
       country,
       String(pageNum),
       String(pageSizeNum),
+      from || '',
+      to || '',
     ])
     const stale = getStale(cacheKey)
     if (stale) {
