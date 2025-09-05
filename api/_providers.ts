@@ -140,6 +140,8 @@ export function buildProviderRequest(p: any, intent: 'top' | 'search', opts: any
       const params = new URLSearchParams({
         q: gq,
         lang: 'en',
+        // pass through country to narrow sources by origin when available (e.g., pk)
+        country,
         max: String(pageSize),
         page: String(page),
       })
