@@ -6,12 +6,6 @@ export function getProvidersForPK() {
   const list: Array<{ type: string; key: string }> = []
   if ((process as any).env.GNEWS_API)
     list.push({ type: 'gnews', key: (process as any).env.GNEWS_API })
-  if ((process as any).env.NEWSDATA_API)
-    list.push({ type: 'newsdata', key: (process as any).env.NEWSDATA_API })
-  if ((process as any).env.WORLD_NEWS_API)
-    list.push({ type: 'worldnews', key: (process as any).env.WORLD_NEWS_API })
-  if ((process as any).env.NEWSAPI_ORG)
-    list.push({ type: 'newsapi_pk', key: (process as any).env.NEWSAPI_ORG })
   return list
 }
 
@@ -19,12 +13,6 @@ export function getProvidersForWorld() {
   const list: Array<{ type: string; key: string }> = []
   if ((process as any).env.GNEWS_API)
     list.push({ type: 'gnews', key: (process as any).env.GNEWS_API })
-  if ((process as any).env.NEWSDATA_API)
-    list.push({ type: 'newsdata', key: (process as any).env.NEWSDATA_API })
-  if ((process as any).env.NEWSAPI_ORG)
-    list.push({ type: 'newsapi', key: (process as any).env.NEWSAPI_ORG })
-  if ((process as any).env.WORLD_NEWS_API)
-    list.push({ type: 'worldnews', key: (process as any).env.WORLD_NEWS_API })
   return list
 }
 

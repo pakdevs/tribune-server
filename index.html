@@ -61,10 +61,10 @@
           </li>
           <li>
             <a href="/api/world">/api/world</a>
-            <span class="muted">(multi-provider, world news)</span>
+            <span class="muted">(GNews top headlines, world)</span>
           </li>
           <li>
-            <a href="/api/pk">/api/pk</a> <span class="muted">(multi-provider, Pakistan)</span>
+            <a href="/api/pk">/api/pk</a> <span class="muted">(GNews top headlines, Pakistan)</span>
           </li>
           <li><a href="/api/search?q=test">/api/search?q=test</a></li>
         </ul>
@@ -146,10 +146,9 @@
         <p class="muted">
           Notes:
           <br />• Category aliases: politics/world → general, tech → technology, sci → science, biz
-          → business. <br />• Pagination: page (>=1), pageSize (1–100). <br />• Provider fallback &
-          rotation reduce rate-limit impact. <br />• PK endpoint final fallback: NewsAPI Everything
-          (q=Pakistan). <br />• For testing add <code>?debug=1&amp;nocache=1</code> to view provider
-          attempts and bypass cache.
+          → business. <br />• Pagination: page (>=1), pageSize (1–100). <br />• Provider: GNews only
+          (Search and Top). <br />• For testing add <code>?debug=1&amp;nocache=1</code> to view
+          request and bypass cache.
         </p>
       </div>
     </div>

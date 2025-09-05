@@ -6,12 +6,12 @@ Production-focused serverless API aggregator providing normalized news articles 
 
 | Purpose                         | Route                            | Notes                                                                        |
 | ------------------------------- | -------------------------------- | ---------------------------------------------------------------------------- |
-| World mixed headlines           | `GET /api/world`                 | Multi-provider fallback                                                      |
-| Pakistan headlines              | `GET /api/pk`                    | Includes NewsAPI search fallback (q=Pakistan)                                |
+| World mixed headlines           | `GET /api/world`                 | Backed by GNews Top Headlines                                                |
+| Pakistan headlines              | `GET /api/pk`                    | Backed by GNews Top Headlines (country=pk)                                   |
 | World category                  | `GET /api/world/category/{slug}` | Slugs: business, entertainment, general, health, science, sports, technology |
 | Pakistan category               | `GET /api/pk/category/{slug}`    | Same slug set; fallback logic applies                                        |
-| US Top (legacy single provider) | `GET /api/top`                   | Direct NewsAPI top-headlines (US default)                                    |
-| Search (global)                 | `GET /api/search?q=term`         | NewsAPI Everything (en)                                                      |
+| US Top (legacy single provider) | `GET /api/top`                   | Deprecated                                                                   |
+| Search (global)                 | `GET /api/search?q=term`         | Backed by GNews Search                                                       |
 | Provider stats (ephemeral)      | `GET /api/stats`                 | In-memory counts (resets on cold start)                                      |
 
 All successful responses: `{ items: Article[] }` (empty array if no matches). Errors: `{ error: string, message? }`.
@@ -33,18 +33,13 @@ All successful responses: `{ items: Article[] }` (empty array if no matches). Er
 
 Set only in Vercel (never commit keys):
 
-- `NEWSAPI_ORG`
-- `NEWSDATA_API`
-- `WORLD_NEWS_API`
 - `GNEWS_API`
 
-Endpoints automatically adapt to whichever keys are present.
+The server uses GNews exclusively.
 
-## Provider Fallback Strategy
+## Provider Strategy
 
-1. Attempt higher quota / broader sources first (NewsData).
-2. Try NewsAPI / WorldNews / GNews in rotating order (minute-based) to distribute load.
-3. Pakistan endpoints append a final synthetic provider `newsapi_pk` performing an Everything search `q=Pakistan` if category/country sources fail.
+- Single provider: GNews (Search and Top Headlines). Country is passed through (e.g., pk/us), and domain filters are applied to queries via `site:domain` when available.
 
 ## Category & Aliases
 
