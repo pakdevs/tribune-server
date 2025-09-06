@@ -113,9 +113,11 @@ export async function tryProvidersSequential(
         variants.push({ label: 'as-is', o: { ...opts } })
       }
 
+      let lastAttemptUrl: string | undefined
       const runVariant = async (label: string, o: any) => {
         const req = buildProviderRequest(p, intent, o)
         if (!req) throw new Error('Unsupported request for provider')
+        lastAttemptUrl = req.url
         try {
           const json = await fetcher(req.url, req.headers)
           // NewsData sometimes returns 200 with status: 'error' in body
@@ -152,8 +154,17 @@ export async function tryProvidersSequential(
         const res = await runVariant(v.label, v.o)
         if (res) return { ...res, attempts, attemptsDetail }
       }
-      // All variants returned empty
-      throw new Error('Empty result')
+      // All variants returned empty – treat as a successful, empty response
+      recordEmpty(p.type)
+      attemptsDetail.push(`${p.type}(empty-all)`)
+      return {
+        items: [],
+        provider: p.type,
+        url: lastAttemptUrl || '',
+        raw: null,
+        attempts,
+        attemptsDetail,
+      }
     } catch (e: any) {
       recordError(p.type, e?.message || String(e))
       if (!attemptsDetail[attemptsDetail.length - 1]?.startsWith(p.type + '(')) {
