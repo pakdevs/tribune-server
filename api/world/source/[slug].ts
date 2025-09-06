@@ -79,8 +79,20 @@ export default async function handler(req: any, res: any) {
           for (const p of ordered) {
             attempts.push(p.type)
             try {
-              // Build strategy fallbacks: only name/slug query now (no domains)
-              const strategies: Array<{ label: string; q?: string; domains?: string[] }> = []
+              // Build strategy fallbacks: prefer NewsData source_id when possible, then q-only
+              const strategies: Array<{
+                label: string
+                q?: string
+                domains?: string[]
+                sources?: string[]
+              }> = []
+              const nameSlug = nameLower ? slugify(nameLower) : ''
+              if (slug) strategies.push({ label: 'sources(slug)', sources: [slug] })
+              if (nameSlug && nameSlug !== slug)
+                strategies.push({ label: 'sources(name)', sources: [nameSlug] })
+              if (slug) strategies.push({ label: 'sources+name(slug)', sources: [slug], q })
+              if (nameSlug && nameSlug !== slug)
+                strategies.push({ label: 'sources+name(name)', sources: [nameSlug], q })
               strategies.push({ label: 'q-only', q })
               // Try each strategy with sub-variants to handle NewsData quirks (e.g., public keys pagination)
               let best: { items: any[] } | null = null
@@ -109,6 +121,7 @@ export default async function handler(req: any, res: any) {
                       country: sub._noCountry ? undefined : country,
                       q: s.q,
                       domains: [],
+                      sources: s.sources || [],
                       from,
                       to,
                       _noPagination: sub._noPagination,
