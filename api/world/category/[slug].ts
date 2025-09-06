@@ -27,7 +27,7 @@ export default async function handler(req: any, res: any) {
   const category = allowed.has(mapped) ? mapped : 'general'
 
   const rawPage = String(req.query.page || '1')
-  const rawPageSize = String(req.query.pageSize || req.query.limit || '50')
+  const rawPageSize = String(req.query.pageSize || req.query.limit || '20')
   const pageNum = Math.max(1, parseInt(rawPage, 10) || 1)
   const pageSizeNum = Math.min(100, Math.max(1, parseInt(rawPageSize, 10) || 50))
   const country = String(req.query.country || 'us')
@@ -50,7 +50,7 @@ export default async function handler(req: any, res: any) {
         if (fresh.meta.attemptsDetail)
           res.setHeader('X-Provider-Attempts-Detail', fresh.meta.attemptsDetail.join(','))
         res.setHeader('X-Provider-Articles', String(fresh.items.length))
-        cache(res, 300, 60)
+        cache(res, 600, 120)
         return res.status(200).json({ items: fresh.items })
       }
     }
@@ -76,7 +76,7 @@ export default async function handler(req: any, res: any) {
         attemptsDetail: result.attemptsDetail,
       },
     })
-    cache(res, 300, 60)
+    cache(res, 600, 120)
     if (String(req.query.debug) === '1') {
       return res.status(200).json({
         items: normalized,

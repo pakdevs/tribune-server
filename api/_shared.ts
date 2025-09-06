@@ -21,7 +21,14 @@ export function cors(res: any) {
 }
 
 export function cache(res: any, seconds = 300, swr = 60) {
-  res.setHeader('Cache-Control', `s-maxage=${seconds}, stale-while-revalidate=${swr}`)
+  const s = Number((process as any)?.env?.CACHE_SMAXAGE ?? seconds)
+  const w = Number((process as any)?.env?.CACHE_SWR ?? swr)
+  res.setHeader(
+    'Cache-Control',
+    `s-maxage=${Number.isFinite(s) ? s : seconds}, stale-while-revalidate=${
+      Number.isFinite(w) ? w : swr
+    }`
+  )
 }
 
 export async function upstreamJson(
