@@ -46,12 +46,12 @@ Examples:
 
 Set only in Vercel (never commit keys):
 
-`NEWSAPI_KEY`
+`NEWSAPI_ORG` (preferred) or `NEWSAPI_KEY` (legacy)
 
 Local development: create a `.env` file in this folder with:
 
 ```
-NEWSAPI_KEY=your_newsapi_key_here
+NEWSAPI_ORG=your_newsapi_key_here
 ```
 
 The server loads it automatically via `dotenv` only in local runs.

@@ -125,8 +125,8 @@ export async function tryProvidersSequential(
   if (!providers.length) {
     const keyPresent = Boolean(getNewsApiKey())
     const hint = keyPresent
-      ? 'NEWSAPI_KEY present but provider build failed'
-      : 'Missing NEWSAPI_KEY. Set it in Vercel env or a local .env file.'
+      ? 'NEWSAPI_* present but provider build failed'
+      : 'Missing NEWSAPI_ORG (or NEWSAPI_KEY). Set it in Vercel env or a local .env file.'
     const err: any = new Error('No providers configured')
     err.hint = hint
     throw err
