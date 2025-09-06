@@ -1,2 +1,2 @@
-// Deprecated: PK_DOMAINS is no longer used. Kept as a placeholder for compatibility.
+// Deprecated file: PK domain allowlist removed. This module is intentionally empty.
 export const PK_DOMAINS: string[] = []

@@ -15,7 +15,8 @@ export default async function handler(req: any, res: any) {
   if (req.method === 'OPTIONS') return res.status(204).end()
   const slug = slugify(req.query.slug || '')
   const name = String(req.query.name || '').trim()
-  const domain = req.query.domain ? String(req.query.domain).trim() : ''
+  // domain parameter is ignored to avoid NewsData plan restrictions
+  const domain = ''
   const rawPage = String(req.query.page || '1')
   const rawPageSize = String(req.query.pageSize || req.query.limit || '20')
   const pageNum = Math.max(1, parseInt(rawPage, 10) || 1)
@@ -73,16 +74,12 @@ export default async function handler(req: any, res: any) {
           const attemptsDetail: string[] = []
           const targetSlug = slug
           const nameLower = name.toLowerCase()
-          const domainLower = (domain || '').toLowerCase()
+          const domainLower = ''
           for (const p of ordered) {
             attempts.push(p.type)
             try {
-              // Build strategy fallbacks: prefer domains-only when domain provided
+              // Build strategy fallbacks: only name/slug query now (no domains)
               const strategies: Array<{ label: string; q?: string; domains?: string[] }> = []
-              if (domainLower) {
-                strategies.push({ label: 'domains-only', domains: [domainLower] })
-                strategies.push({ label: 'domains+name', q, domains: [domainLower] })
-              }
               strategies.push({ label: 'q-only', q })
               // Try each strategy with sub-variants to handle NewsData quirks (e.g., public keys pagination)
               let best: { items: any[] } | null = null
@@ -108,7 +105,7 @@ export default async function handler(req: any, res: any) {
                       pageSize: pageSizeNum,
                       country: sub._noCountry ? undefined : country,
                       q: s.q,
-                      domains: s.domains || [],
+                      domains: [],
                       from,
                       to,
                       _noPagination: sub._noPagination,
@@ -151,14 +148,7 @@ export default async function handler(req: any, res: any) {
                       const aSlug = slugify(aName)
                       const slugMatch = targetSlug && aSlug ? aSlug === targetSlug : false
                       const nameMatch = nameLower ? aName.toLowerCase().includes(nameLower) : false
-                      const dom = String(a?.sourceDomain || '').toLowerCase()
-                      const domainMatch = domainLower
-                        ? !!dom &&
-                          (dom === domainLower ||
-                            dom.endsWith(`.${domainLower}`) ||
-                            domainLower.endsWith(`.${dom}`))
-                        : false
-                      return slugMatch || nameMatch || domainMatch
+                      return slugMatch || nameMatch
                     })
                     if (filtered.length) {
                       attemptsDetail.push(`${p.type}:${sub.label}(ok:${filtered.length})`)
