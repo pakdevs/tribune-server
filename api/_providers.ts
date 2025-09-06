@@ -58,8 +58,7 @@ export function buildProviderRequest(p: any, intent: 'top' | 'search', opts: any
       params.set('category', category)
     }
 
-    const base =
-      intent === 'top' ? 'https://newsdata.io/api/1/latest' : 'https://newsdata.io/api/1/news'
+    const base = 'https://newsdata.io/api/1/news'
     const url = `${base}?${params.toString()}`
     return { url, headers: {}, pick: (data: any) => data?.results || data?.articles || [] }
   }
@@ -97,17 +96,51 @@ export async function tryProvidersSequential(
         attemptsDetail.push(`${p.type}(cooldown)`)
         continue
       }
-      const req = buildProviderRequest(p, intent, opts)
-      if (!req) throw new Error('Unsupported request for provider')
-      const json = await fetcher(req.url, req.headers)
-      const items = req.pick(json)
-      if (Array.isArray(items) && items.length) {
-        recordSuccess(p.type, items.length)
-        attemptsDetail.push(`${p.type}(ok:${items.length})`)
-        return { items, provider: p.type, url: req.url, raw: json, attempts, attemptsDetail }
+      // Build attempt variants for NewsData to reduce 422/empty cases
+      const variants: Array<{ label: string; o: any }> = []
+      if (p.type === 'newsdata') {
+        variants.push({ label: 'as-is', o: { ...opts } })
+        variants.push({ label: 'no-category', o: { ...opts, category: undefined } })
+        variants.push({ label: 'no-domains-sources', o: { ...opts, domains: [], sources: [] } })
+        variants.push({ label: 'no-q', o: { ...opts, q: undefined } })
+        variants.push({
+          label: 'minimal',
+          o: { page: opts.page, pageSize: opts.pageSize, country: opts.country },
+        })
+      } else {
+        variants.push({ label: 'as-is', o: { ...opts } })
       }
-      recordEmpty(p.type)
-      attemptsDetail.push(`${p.type}(empty)`)
+
+      const runVariant = async (label: string, o: any) => {
+        const req = buildProviderRequest(p, intent, o)
+        if (!req) throw new Error('Unsupported request for provider')
+        try {
+          const json = await fetcher(req.url, req.headers)
+          const items = req.pick(json)
+          if (Array.isArray(items) && items.length) {
+            recordSuccess(p.type, items.length)
+            attemptsDetail.push(`${p.type}:${label}(ok:${items.length})`)
+            return { items, provider: p.type, url: req.url, raw: json }
+          }
+          recordEmpty(p.type)
+          attemptsDetail.push(`${p.type}:${label}(empty)`)
+          return null
+        } catch (err: any) {
+          const msg = String(err?.message || '')
+          const status = err?.status || (msg.match(/\b(\d{3})\b/)?.[1] ?? '')
+          if (String(status) === '422') {
+            attemptsDetail.push(`${p.type}:${label}(422)`) // try next variant
+            return null
+          }
+          throw err
+        }
+      }
+
+      for (const v of variants) {
+        const res = await runVariant(v.label, v.o)
+        if (res) return { ...res, attempts, attemptsDetail }
+      }
+      // All variants returned empty
       throw new Error('Empty result')
     } catch (e: any) {
       recordError(p.type, e?.message || String(e))
