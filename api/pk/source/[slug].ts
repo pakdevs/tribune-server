@@ -17,7 +17,7 @@ export default async function handler(req: any, res: any) {
   const name = String(req.query.name || '').trim()
   const domain = req.query.domain ? String(req.query.domain).trim() : ''
   const rawPage = String(req.query.page || '1')
-  const rawPageSize = String(req.query.pageSize || req.query.limit || '50')
+  const rawPageSize = String(req.query.pageSize || req.query.limit || '20')
   const pageNum = Math.max(1, parseInt(rawPage, 10) || 1)
   const pageSizeNum = Math.min(100, Math.max(1, parseInt(rawPageSize, 10) || 50))
   const from = req.query.from ? String(req.query.from) : undefined
@@ -73,56 +73,79 @@ export default async function handler(req: any, res: any) {
           const attemptsDetail: string[] = []
           const targetSlug = slug
           const nameLower = name.toLowerCase()
+          const domainLower = (domain || '').toLowerCase()
           for (const p of ordered) {
             attempts.push(p.type)
             try {
-              const reqSpec = buildProviderRequest(p, 'search', {
-                page: pageNum,
-                pageSize: pageSizeNum,
-                country,
-                q,
-                domains: domain ? [domain] : [],
-                from,
-                to,
-              })
-              if (!reqSpec) {
-                attemptsDetail.push(`${p.type}(unsupported)`)
-                continue
+              // Build strategy fallbacks: prefer domains-only when domain provided
+              const strategies: Array<{ label: string; q?: string; domains?: string[] }> = []
+              if (domainLower) {
+                strategies.push({ label: 'domains-only', domains: [domainLower] })
+                strategies.push({ label: 'domains+name', q, domains: [domainLower] })
               }
-              const controller = new AbortController()
-              const timeoutId = setTimeout(() => controller.abort(), 8000)
-              const json = await fetch(reqSpec.url, {
-                headers: reqSpec.headers,
-                signal: controller.signal,
-              })
-                .then((r) => {
-                  if (!r.ok) throw new Error('Upstream ' + r.status)
-                  return r.json()
+              strategies.push({ label: 'q-only', q })
+
+              let best: { items: any[] } | null = null
+              for (const s of strategies) {
+                const reqSpec = buildProviderRequest(p, 'search', {
+                  page: pageNum,
+                  pageSize: pageSizeNum,
+                  country,
+                  q: s.q,
+                  domains: s.domains || [],
+                  from,
+                  to,
                 })
-                .finally(() => clearTimeout(timeoutId))
-              const items = reqSpec.pick(json)
-              if (!Array.isArray(items) || !items.length) {
-                attemptsDetail.push(`${p.type}(empty)`)
-                continue
+                if (!reqSpec) {
+                  attemptsDetail.push(`${p.type}:${s.label}(unsupported)`)
+                  continue
+                }
+                const controller = new AbortController()
+                const timeoutId = setTimeout(() => controller.abort(), 8000)
+                const json = await fetch(reqSpec.url, {
+                  headers: reqSpec.headers,
+                  signal: controller.signal,
+                })
+                  .then((r) => {
+                    if (!r.ok) throw new Error('Upstream ' + r.status)
+                    return r.json()
+                  })
+                  .finally(() => clearTimeout(timeoutId))
+                const items = reqSpec.pick(json)
+                if (!Array.isArray(items) || !items.length) {
+                  attemptsDetail.push(`${p.type}:${s.label}(empty)`)
+                  continue
+                }
+                const normalized = items.map(normalize).filter(Boolean)
+                const filtered = normalized.filter((a: any) => {
+                  const aName = String(a?.displaySourceName || a?.sourceName || '').trim()
+                  const aSlug = slugify(aName)
+                  const slugMatch = targetSlug && aSlug ? aSlug === targetSlug : false
+                  const nameMatch = nameLower ? aName.toLowerCase().includes(nameLower) : false
+                  const dom = String(a?.sourceDomain || '').toLowerCase()
+                  const domainMatch = domainLower
+                    ? !!dom &&
+                      (dom === domainLower ||
+                        dom.endsWith(`.${domainLower}`) ||
+                        domainLower.endsWith(`.${dom}`))
+                    : false
+                  return slugMatch || nameMatch || domainMatch
+                })
+                if (filtered.length) {
+                  attemptsDetail.push(`${p.type}:${s.label}(ok:${filtered.length})`)
+                  best = { items: filtered }
+                  break
+                }
+                attemptsDetail.push(`${p.type}:${s.label}(no-source-match)`)
               }
-              const normalized = items.map(normalize).filter(Boolean)
-              const filtered = normalized.filter((a: any) => {
-                const aName = String(a?.displaySourceName || a?.sourceName || '').trim()
-                const aSlug = slugify(aName)
-                const slugMatch = targetSlug && aSlug ? aSlug === targetSlug : false
-                const nameMatch = nameLower ? aName.toLowerCase().includes(nameLower) : false
-                return slugMatch || nameMatch
-              })
-              if (filtered.length) {
-                attemptsDetail.push(`${p.type}(ok:${filtered.length})`)
+              if (best) {
                 return {
-                  items: filtered,
+                  items: best.items,
                   provider: p.type,
                   attempts,
                   attemptsDetail,
                 }
               }
-              attemptsDetail.push(`${p.type}(no-source-match)`)
             } catch (e) {
               attemptsDetail.push(`${p.type}(err)`)
             }
@@ -157,6 +180,7 @@ export default async function handler(req: any, res: any) {
           slug,
           from,
           to,
+          domain,
         },
       })
     }

@@ -57,31 +57,39 @@
         <p>API endpoints:</p>
         <ul>
           <li>
-            <a href="/api/top">/api/top</a> <span class="muted">(US default, all categories)</span>
-          </li>
-          <li>
             <a href="/api/world">/api/world</a>
             <span class="muted">(NewsAPI top headlines, world)</span>
           </li>
           <li>
             <a href="/api/pk">/api/pk</a>
-            <span class="muted">(NewsAPI everything: q=Pakistan)</span>
+            <span class="muted"
+              >(NewsAPI everything: Pakistan-focused; domain-scoped by default)</span
+            >
           </li>
-          <li><a href="/api/search?q=test">/api/search?q=test</a></li>
+          <li>
+            <a href="/api/search?q=test">/api/search?q=test</a>
+            <span class="muted">(supports domains, from, to)</span>
+          </li>
         </ul>
         <p>Examples:</p>
         <ul>
-          <li><a href="/api/top?page=1&pageSize=20">/api/top?page=1&amp;pageSize=20</a></li>
-          <li>
-            <a href="/api/top?category=technology&page=2"
-              >/api/top?category=technology&amp;page=2</a
-            >
-          </li>
           <li><a href="/api/world?page=1&pageSize=20">/api/world?page=1&amp;pageSize=20</a></li>
           <li><a href="/api/pk?page=1&pageSize=20">/api/pk?page=1&amp;pageSize=20</a></li>
           <li>
+            <a href="/api/pk?domains=dawn.com,geo.tv&mode=extend&page=1&pageSize=20"
+              >/api/pk?domains=dawn.com,geo.tv&amp;mode=extend&amp;page=1&amp;pageSize=20</a
+            >
+            <span class="muted">(override/extend default PK domains)</span>
+          </li>
+          <li>
             <a href="/api/search?q=pakistan&page=1&pageSize=20"
               >/api/search?q=pakistan&amp;page=1&amp;pageSize=20</a
+            >
+          </li>
+          <li>
+            <a
+              href="/api/search?q=economy&domains=theguardian.com,reuters.com&from=2024-01-01&to=2024-12-31&page=1&pageSize=20"
+              >/api/search?q=economy&amp;domains=theguardian.com,reuters.com&amp;from=2024-01-01&amp;to=2024-12-31&amp;page=1&amp;pageSize=20</a
             >
           </li>
         </ul>
@@ -113,13 +121,15 @@
         </ul>
         <p><strong>Pakistan sources (examples)</strong></p>
         <ul>
-          <li><a href="/api/pk/source/dawn?name=Dawn">Dawn</a></li>
-          <li><a href="/api/pk/source/geo-news?name=Geo%20News">Geo News</a></li>
+          <li><a href="/api/pk/source/dawn?name=Dawn&domain=dawn.com">Dawn</a></li>
+          <li><a href="/api/pk/source/geo-news?name=Geo%20News&domain=geo.tv">Geo News</a></li>
           <li>
-            <a href="/api/pk/source/express-tribune?name=Express%20Tribune">Express Tribune</a>
+            <a href="/api/pk/source/express-tribune?name=Express%20Tribune&domain=tribune.com.pk"
+              >Express Tribune</a
+            >
           </li>
           <li>
-            <a href="/api/pk/source/the-news?name=The%20News">The News</a>
+            <a href="/api/pk/source/the-news?name=The%20News&domain=thenews.com.pk">The News</a>
           </li>
         </ul>
         <p><strong>Categories (World)</strong></p>
@@ -146,9 +156,12 @@
           Notes:
           <br />• Category aliases: politics/world → general, tech → technology, sci → science, biz
           → business. <br />• Pagination: page (>=1), pageSize (1–100). <br />• Provider: NewsAPI
-          (Top headlines and Everything). <br />• Source filtering via `domain` param on source
-          endpoints. <br />• For testing add <code>?debug=1&amp;nocache=1</code> to view request and
-          bypass cache.
+          (Top headlines and Everything). <br />• PK endpoints accept
+          <code>domains=</code> (comma-separated) and <code>mode=extend|replace</code> to adjust the
+          curated domain set. <br />• Search supports <code>domains</code>, <code>from</code>, and
+          <code>to</code>. <br />• Source endpoints accept <code>name</code> and optional
+          <code>domain</code> for better matching. <br />• For testing add
+          <code>?debug=1&amp;nocache=1</code> to view request and bypass cache.
         </p>
       </div>
     </div>

@@ -52,14 +52,14 @@ export function buildProviderRequest(p: any, intent: 'top' | 'search', opts: any
         pick: (data: any) => data?.articles || [],
       }
     }
-    if (intent === 'search' && q) {
+    if (intent === 'search' && (q || (domains && domains.length))) {
       const params = new URLSearchParams({
-        q,
         language: 'en',
         sortBy: 'publishedAt',
         pageSize: String(pageSize),
         page: String(page),
       })
+      if (q) params.set('q', q)
       if (domains && domains.length) params.set('domains', domains.join(','))
       if (opts.from) params.set('from', String(opts.from))
       if (opts.to) params.set('to', String(opts.to))
@@ -97,14 +97,14 @@ export function buildProviderRequest(p: any, intent: 'top' | 'search', opts: any
         pick: (data: any) => data?.articles || [],
       }
     }
-    if (intent === 'search' && q) {
+    if (intent === 'search' && (q || (domains && domains.length))) {
       const params = new URLSearchParams({
-        q,
         language: 'en',
         sortBy: 'publishedAt',
         page: String(page),
         pageSize: String(pageSize),
       })
+      if (q) params.set('q', q)
       if (domains && domains.length) params.set('domains', domains.join(','))
       if (opts.from) params.set('from', String(opts.from))
       if (opts.to) params.set('to', String(opts.to))
