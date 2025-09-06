@@ -48,3 +48,4 @@ Notes
 - Page size capped/defaulted to 10; public keys omit page_size.
 - Source endpoints ignore domain; prefer NewsData source_id when available.
 - Robust fallback variants handle 422s and plan limits.
+  ...
