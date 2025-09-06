@@ -85,59 +85,91 @@ export default async function handler(req: any, res: any) {
                 strategies.push({ label: 'domains+name', q, domains: [domainLower] })
               }
               strategies.push({ label: 'q-only', q })
-
+              // Try each strategy with sub-variants to handle NewsData quirks (e.g., public keys pagination)
               let best: { items: any[] } | null = null
               for (const s of strategies) {
-                const reqSpec = buildProviderRequest(p, 'search', {
-                  page: pageNum,
-                  pageSize: pageSizeNum,
-                  country,
-                  q: s.q,
-                  domains: s.domains || [],
-                  from,
-                  to,
-                })
-                if (!reqSpec) {
-                  attemptsDetail.push(`${p.type}:${s.label}(unsupported)`)
-                  continue
+                // two sub-variants: default and no-pagination
+                const subVariants = [
+                  { label: `${s.label}`, _noPagination: false },
+                  { label: `${s.label}-no-pagination`, _noPagination: true },
+                ]
+                for (const sub of subVariants) {
+                  try {
+                    const reqSpec = buildProviderRequest(p, 'search', {
+                      page: pageNum,
+                      pageSize: pageSizeNum,
+                      country,
+                      q: s.q,
+                      domains: s.domains || [],
+                      from,
+                      to,
+                      _noPagination: sub._noPagination,
+                    })
+                    if (!reqSpec) {
+                      attemptsDetail.push(`${p.type}:${sub.label}(unsupported)`)
+                      continue
+                    }
+                    const controller = new AbortController()
+                    const timeoutId = setTimeout(() => controller.abort(), 8000)
+                    const json = await fetch(reqSpec.url, {
+                      headers: reqSpec.headers,
+                      signal: controller.signal,
+                    })
+                      .then(async (r) => {
+                        if (!r.ok) {
+                          const err: any = new Error('Upstream ' + r.status)
+                          err.status = r.status
+                          throw err
+                        }
+                        return r.json()
+                      })
+                      .finally(() => clearTimeout(timeoutId))
+                    // NewsData may return 200 with status:error
+                    if (p.type === 'newsdata') {
+                      const statusField = String((json as any)?.status || '').toLowerCase()
+                      if (statusField && statusField !== 'success') {
+                        attemptsDetail.push(`${p.type}:${sub.label}(status:${statusField})`)
+                        continue
+                      }
+                    }
+                    const items = reqSpec.pick(json)
+                    if (!Array.isArray(items) || !items.length) {
+                      attemptsDetail.push(`${p.type}:${sub.label}(empty)`)
+                      continue
+                    }
+                    const normalized = items.map(normalize).filter(Boolean)
+                    const filtered = normalized.filter((a: any) => {
+                      const aName = String(a?.displaySourceName || a?.sourceName || '').trim()
+                      const aSlug = slugify(aName)
+                      const slugMatch = targetSlug && aSlug ? aSlug === targetSlug : false
+                      const nameMatch = nameLower ? aName.toLowerCase().includes(nameLower) : false
+                      const dom = String(a?.sourceDomain || '').toLowerCase()
+                      const domainMatch = domainLower
+                        ? !!dom &&
+                          (dom === domainLower ||
+                            dom.endsWith(`.${domainLower}`) ||
+                            domainLower.endsWith(`.${dom}`))
+                        : false
+                      return slugMatch || nameMatch || domainMatch
+                    })
+                    if (filtered.length) {
+                      attemptsDetail.push(`${p.type}:${sub.label}(ok:${filtered.length})`)
+                      best = { items: filtered }
+                      break
+                    }
+                    attemptsDetail.push(`${p.type}:${sub.label}(no-source-match)`)
+                  } catch (err: any) {
+                    const msg = String(err?.message || '')
+                    const status = err?.status || (msg.match(/\b(\d{3})\b/)?.[1] ?? '')
+                    if (String(status) === '422') {
+                      attemptsDetail.push(`${p.type}:${sub.label}(422)`) // try next sub-variant
+                      continue
+                    }
+                    attemptsDetail.push(`${p.type}:${sub.label}(err)`) // continue trying others
+                    continue
+                  }
                 }
-                const controller = new AbortController()
-                const timeoutId = setTimeout(() => controller.abort(), 8000)
-                const json = await fetch(reqSpec.url, {
-                  headers: reqSpec.headers,
-                  signal: controller.signal,
-                })
-                  .then((r) => {
-                    if (!r.ok) throw new Error('Upstream ' + r.status)
-                    return r.json()
-                  })
-                  .finally(() => clearTimeout(timeoutId))
-                const items = reqSpec.pick(json)
-                if (!Array.isArray(items) || !items.length) {
-                  attemptsDetail.push(`${p.type}:${s.label}(empty)`)
-                  continue
-                }
-                const normalized = items.map(normalize).filter(Boolean)
-                const filtered = normalized.filter((a: any) => {
-                  const aName = String(a?.displaySourceName || a?.sourceName || '').trim()
-                  const aSlug = slugify(aName)
-                  const slugMatch = targetSlug && aSlug ? aSlug === targetSlug : false
-                  const nameMatch = nameLower ? aName.toLowerCase().includes(nameLower) : false
-                  const dom = String(a?.sourceDomain || '').toLowerCase()
-                  const domainMatch = domainLower
-                    ? !!dom &&
-                      (dom === domainLower ||
-                        dom.endsWith(`.${domainLower}`) ||
-                        domainLower.endsWith(`.${dom}`))
-                    : false
-                  return slugMatch || nameMatch || domainMatch
-                })
-                if (filtered.length) {
-                  attemptsDetail.push(`${p.type}:${s.label}(ok:${filtered.length})`)
-                  best = { items: filtered }
-                  break
-                }
-                attemptsDetail.push(`${p.type}:${s.label}(no-source-match)`)
+                if (best) break
               }
               if (best) {
                 return {
