@@ -46,8 +46,15 @@ Examples:
 
 Set only in Vercel (never commit keys):
 
-- `NEWSAPI_KEY`
+`NEWSAPI_KEY`
 
+Local development: create a `.env` file in this folder with:
+
+```
+NEWSAPI_KEY=your_newsapi_key_here
+```
+
+The server loads it automatically via `dotenv` only in local runs.
 The server uses NewsAPI.org. Keys are never exposed to the client.
 
 ## Provider Strategy

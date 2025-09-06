@@ -1,20 +1,21 @@
 import { recordSuccess, recordError, recordEmpty } from './_stats.js'
+import { getNewsApiKey } from './_env.js'
 
 const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n))
 
 export function getProvidersForPK() {
   const list: Array<{ type: string; key: string }> = []
   // Prefer NewsAPI: Pakistan is not a supported country for top-headlines, so use a Pakistan-focused Everything query
-  if ((process as any).env.NEWSAPI_KEY)
-    list.push({ type: 'newsapi_pk', key: (process as any).env.NEWSAPI_KEY })
+  const key = getNewsApiKey()
+  if (key) list.push({ type: 'newsapi_pk', key })
   return list
 }
 
 export function getProvidersForWorld() {
   const list: Array<{ type: string; key: string }> = []
   // Prefer NewsAPI for world headlines and search
-  if ((process as any).env.NEWSAPI_KEY)
-    list.push({ type: 'newsapi', key: (process as any).env.NEWSAPI_KEY })
+  const key = getNewsApiKey()
+  if (key) list.push({ type: 'newsapi', key })
   return list
 }
 
@@ -121,7 +122,15 @@ export async function tryProvidersSequential(
   const errors: string[] = []
   const attempts: string[] = []
   const attemptsDetail: string[] = []
-  if (!providers.length) throw new Error('No providers configured')
+  if (!providers.length) {
+    const keyPresent = Boolean(getNewsApiKey())
+    const hint = keyPresent
+      ? 'NEWSAPI_KEY present but provider build failed'
+      : 'Missing NEWSAPI_KEY. Set it in Vercel env or a local .env file.'
+    const err: any = new Error('No providers configured')
+    err.hint = hint
+    throw err
+  }
   // Use providers as supplied by getProviders* (no special-casing GNews)
   let ordered = providers
   for (let i = 0; i < ordered.length; i++) {

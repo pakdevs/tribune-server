@@ -12,6 +12,7 @@
     "test": "tsx --test tests/*.mjs"
   },
   "devDependencies": {
+    "dotenv": "^16.4.5",
     "tsx": "^4.20.5"
   }
 }

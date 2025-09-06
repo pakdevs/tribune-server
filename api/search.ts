@@ -114,7 +114,11 @@ export default async function handler(req: any, res: any) {
       return res.status(200).json({ items: stale.items, stale: true })
     }
     if (String(req.query.debug) === '1')
-      return res.status(500).json({ error: 'Proxy failed', message: e?.message || String(e) })
+      return res.status(500).json({
+        error: 'Proxy failed',
+        message: e?.message || String(e),
+        hint: (e as any)?.hint,
+      })
     return res.status(500).json({ error: 'Proxy failed' })
   }
 }
