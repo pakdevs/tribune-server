@@ -87,16 +87,26 @@ export default async function handler(req: any, res: any) {
               // Try each strategy with sub-variants to handle NewsData quirks (e.g., public keys pagination)
               let best: { items: any[] } | null = null
               for (const s of strategies) {
-                const subVariants = [
-                  { label: `${s.label}`, _noPagination: false },
+                const subVariants: Array<{
+                  label: string
+                  _noPagination?: boolean
+                  _noCountry?: boolean
+                }> = [
+                  { label: `${s.label}` },
                   { label: `${s.label}-no-pagination`, _noPagination: true },
                 ]
+                subVariants.push({ label: `${s.label}-no-country`, _noCountry: true })
+                subVariants.push({
+                  label: `${s.label}-no-country-no-pagination`,
+                  _noCountry: true,
+                  _noPagination: true,
+                })
                 for (const sub of subVariants) {
                   try {
                     const reqSpec = buildProviderRequest(p, 'search', {
                       page: pageNum,
                       pageSize: pageSizeNum,
-                      country,
+                      country: sub._noCountry ? undefined : country,
                       q: s.q,
                       domains: s.domains || [],
                       from,
