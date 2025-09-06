@@ -39,29 +39,28 @@ export function buildProviderRequest(p: any, intent: 'top' | 'search', opts: any
     : undefined
 
   if (p.type === 'newsdata') {
-    // NewsData.io v2 endpoints: /api/1/news (general) and /api/1/latest (top?)
-    // We'll use /api/1/news for both with appropriate filters.
     const params = new URLSearchParams({
       apikey: p.key,
       page: String(page),
-      size: String(pageSize),
+      page_size: String(pageSize),
       language: 'en',
     })
-    // Map common filters
+    // Filters common to both intents
     if (country) params.set('country', country)
-    if (category && category !== 'all') params.set('category', category)
     if (q) params.set('q', q)
     if (domains.length) params.set('domain', domains.join(','))
     if (sources.length) params.set('source_id', sources.join(','))
     if (opts.from) params.set('from_date', String(opts.from))
     if (opts.to) params.set('to_date', String(opts.to))
 
-    const url = `https://newsdata.io/api/1/news?${params.toString()}`
-    return {
-      url,
-      headers: {},
-      pick: (data: any) => data?.results || data?.articles || [],
+    // Category: skip 'general' and 'all' for NewsData
+    if (category && category !== 'all' && category !== 'general') {
+      params.set('category', category)
     }
+
+    const base = intent === 'top' ? 'https://newsdata.io/api/1/latest' : 'https://newsdata.io/api/1/news'
+    const url = `${base}?${params.toString()}`
+    return { url, headers: {}, pick: (data: any) => data?.results || data?.articles || [] }
   }
 
   // Only NewsData provider supported
