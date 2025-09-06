@@ -73,16 +73,23 @@ export function buildProviderRequest(p: any, intent: 'top' | 'search', opts: any
   if (p.type === 'newsapi_pk') {
     if (intent === 'top') {
       const params = new URLSearchParams({
-        q:
-          opts.category && String(opts.category).toLowerCase() !== 'general'
-            ? `Pakistan ${String(opts.category)}`
-            : 'Pakistan',
         language: 'en',
         sortBy: 'publishedAt',
         page: String(page),
         pageSize: String(pageSize),
       })
-      if (domains && domains.length) params.set('domains', domains.join(','))
+      const hasDomains = domains && domains.length > 0
+      // Prefer caller-provided q (e.g., category or keyword). If none and no domains, fall back to Pakistan.
+      const explicitQ =
+        typeof opts.q === 'string' && opts.q.trim() ? String(opts.q).trim() : undefined
+      const fallbackQ = !hasDomains
+        ? opts.category && String(opts.category).toLowerCase() !== 'general'
+          ? `Pakistan ${String(opts.category)}`
+          : 'Pakistan'
+        : undefined
+      const qFinal = explicitQ || fallbackQ
+      if (qFinal) params.set('q', qFinal)
+      if (hasDomains) params.set('domains', domains.join(','))
       return {
         url: `https://newsapi.org/v2/everything?${params.toString()}`,
         headers: { 'X-Api-Key': p.key },

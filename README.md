@@ -57,6 +57,15 @@ NEWSAPI_ORG=your_newsapi_key_here
 The server loads it automatically via `dotenv` only in local runs.
 The server uses NewsAPI.org. Keys are never exposed to the client.
 
+### Pakistan feed domain scoping
+
+NewsAPI does not support `country=pk` on Top Headlines. To keep PK feed focused on Pakistani outlets, `/api/pk` and `/api/pk/category/{slug}` default to a curated domains allowlist.
+
+- Override/extend domains:
+  - `?domains=dawn.com,tribune.com.pk` to add more.
+  - `?mode=replace&domains=dawn.com,tribune.com.pk` to replace the list entirely.
+- Debug header: responses include `X-PK-Domains` with the effective list.
+
 ## Provider Strategy
 
 - Single provider: NewsAPI.org. Top headlines uses /v2/top-headlines (cannot combine sources with country/category); Search uses /v2/everything with optional `domains` and time sorting.

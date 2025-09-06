@@ -1,0 +1,20 @@
+// Curated list of Pakistani news outlet domains used to scope the PK feed
+export const PK_DOMAINS: string[] = [
+  'dawn.com',
+  'thenews.com.pk',
+  'tribune.com.pk',
+  'geo.tv',
+  'arynews.tv',
+  'samaa.tv',
+  'pakistantoday.com.pk',
+  'profit.pakistantoday.com.pk',
+  'brecorder.com',
+  'dailytimes.com.pk',
+  'nation.com.pk',
+  'dailypakistan.com.pk',
+  'bolnews.com',
+  'humnews.pk',
+  '92news.com.pk',
+  'thefridaytimes.com',
+  'pakobserver.net',
+]

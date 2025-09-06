@@ -2,6 +2,7 @@ import { normalize } from '../../_normalize.js'
 import { cors, cache, upstreamJson } from '../../_shared.js'
 import { makeKey, getFresh, getStale, setCache } from '../../_cache.js'
 import { getProvidersForPK, tryProvidersSequential } from '../../_providers.js'
+import { PK_DOMAINS } from '../_domains.js'
 
 export default async function handler(req: any, res: any) {
   cors(res)
@@ -28,9 +29,30 @@ export default async function handler(req: any, res: any) {
 
   const page = String(req.query.page || '1')
   const pageSize = String(req.query.pageSize || req.query.limit || '50')
+  // Domain scoping controls
+  const domainsParam = String(req.query.domains || '').trim()
+  const mode = String(req.query.mode || 'extend').toLowerCase()
+  const userDomains = domainsParam
+    ? domainsParam
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : []
+  const useDomains =
+    mode === 'replace' && userDomains.length
+      ? Array.from(new Set(userDomains))
+      : Array.from(new Set([...PK_DOMAINS, ...userDomains]))
   const country = 'pk'
   try {
-    const cacheKey = makeKey(['pk', 'cat', category, 'pk', page, pageSize])
+    const cacheKey = makeKey([
+      'pk',
+      'cat',
+      category,
+      'pk',
+      page,
+      pageSize,
+      'd:' + useDomains.join(','),
+    ])
     const noCache = String(req.query.nocache || '0') === '1'
     if (!noCache) {
       const fresh = getFresh(cacheKey)
@@ -50,7 +72,7 @@ export default async function handler(req: any, res: any) {
     const result = await tryProvidersSequential(
       providers,
       'top',
-      { page, pageSize, country, category },
+      { page, pageSize, country, category, domains: useDomains, q: category },
       (url, headers) => upstreamJson(url, headers)
     )
     const normalized = result.items.map(normalize).filter(Boolean)
@@ -58,6 +80,7 @@ export default async function handler(req: any, res: any) {
     res.setHeader('X-Provider-Attempts', result.attempts?.join(',') || result.provider)
     if (result.attemptsDetail)
       res.setHeader('X-Provider-Attempts-Detail', result.attemptsDetail.join(','))
+    res.setHeader('X-PK-Domains', useDomains.join(','))
     res.setHeader('X-Provider-Articles', String(normalized.length))
     setCache(cacheKey, {
       items: normalized,
@@ -79,6 +102,7 @@ export default async function handler(req: any, res: any) {
           cacheKey,
           noCache,
           category,
+          domains: useDomains,
         },
       })
     }
