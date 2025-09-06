@@ -52,10 +52,7 @@ export const normalize = (raw: RawArticle | null | undefined): NormalizedArticle
     (raw as any).author || (raw as any).creator || (raw as any).byline || 'Unknown'
   )
   const publishDate = String(
-    (raw as any).publishDate ||
-      (raw as any).publishedAt ||
-      (raw as any).pubDate ||
-      new Date().toISOString()
+    (raw as any).publishDate || (raw as any).publishedAt || (raw as any).pubDate || ''
   )
   const category = String(
     (raw as any).category || (raw as any).section || (raw as any).topic || 'general'
