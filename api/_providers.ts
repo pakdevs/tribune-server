@@ -40,12 +40,20 @@ export function buildProviderRequest(p: any, intent: 'top' | 'search', opts: any
 
   if (p.type === 'newsdata') {
     const pageSizeUsed = Math.min(10, pageSize)
-    const params = new URLSearchParams({
-      apikey: p.key,
-      page: String(page),
-      page_size: String(pageSizeUsed),
-      language: 'en',
-    })
+    const params = new URLSearchParams({ apikey: p.key, language: 'en' })
+    const includePagination = !opts?._noPagination
+    const isPublicKey = String(p.key || '').startsWith('pub_')
+    // NewsData 'page' is a token; avoid sending page=1. Use pageToken when provided; else only send numeric when >1.
+    if (includePagination) {
+      if (opts?.pageToken) {
+        params.set('page', String(opts.pageToken))
+      } else if (page > 1) {
+        params.set('page', String(page))
+      }
+      if (!isPublicKey) {
+        params.set('page_size', String(pageSizeUsed))
+      }
+    }
     // Filters common to both intents
     if (country) params.set('country', country)
     if (q) params.set('q', q)
@@ -101,6 +109,7 @@ export async function tryProvidersSequential(
       const variants: Array<{ label: string; o: any }> = []
       if (p.type === 'newsdata') {
         variants.push({ label: 'as-is', o: { ...opts } })
+        variants.push({ label: 'no-pagination', o: { ...opts, _noPagination: true } })
         variants.push({ label: 'no-category', o: { ...opts, category: undefined } })
         variants.push({ label: 'no-domains-sources', o: { ...opts, domains: [], sources: [] } })
         variants.push({ label: 'no-q', o: { ...opts, q: undefined } })
