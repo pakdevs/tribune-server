@@ -82,10 +82,11 @@ export function buildProviderRequest(p: any, intent: 'top' | 'search', opts: any
       // Prefer caller-provided q (e.g., category or keyword). Otherwise, fall back to Pakistan (optionally with category)
       const explicitQ =
         typeof opts.q === 'string' && opts.q.trim() ? String(opts.q).trim() : undefined
-      const fallbackQ =
-        opts.category && String(opts.category).toLowerCase() !== 'general'
+      const fallbackQ = !hasDomains
+        ? opts.category && String(opts.category).toLowerCase() !== 'general'
           ? `Pakistan ${String(opts.category)}`
           : 'Pakistan'
+        : undefined
       const qFinal = explicitQ || fallbackQ
       if (qFinal) params.set('q', qFinal)
       if (hasDomains) params.set('domains', domains.join(','))

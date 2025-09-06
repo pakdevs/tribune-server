@@ -69,18 +69,60 @@ export default async function handler(req: any, res: any) {
     }
     res.setHeader('X-Cache', 'MISS')
     const providers = getProvidersForPK()
-    const result = await tryProvidersSequential(
+    let result = await tryProvidersSequential(
       providers,
       'top',
       { page, pageSize, country, category, domains: useDomains, q: category },
       (url, headers) => upstreamJson(url, headers)
     )
-    const normalized = result.items.map(normalize).filter(Boolean)
+    let normalized = result.items.map(normalize).filter(Boolean)
+    let pkFallback: string | undefined
+    // Fallback 1: if empty, try with domains + q="Pakistan <category>"
+    if (!normalized.length) {
+      try {
+        const fb1 = await tryProvidersSequential(
+          providers,
+          'top',
+          {
+            page,
+            pageSize,
+            country,
+            domains: useDomains,
+            q: category && category !== 'general' ? `Pakistan ${category}` : 'Pakistan',
+          },
+          (url, headers) => upstreamJson(url, headers)
+        )
+        const n1 = fb1.items.map(normalize).filter(Boolean)
+        if (n1.length) {
+          result = fb1
+          normalized = n1
+          pkFallback = 'domains+q'
+        }
+      } catch {}
+    }
+    // Fallback 2: if still empty, try q=Pakistan with no domains
+    if (!normalized.length) {
+      try {
+        const fb2 = await tryProvidersSequential(
+          providers,
+          'top',
+          { page, pageSize, country, q: 'Pakistan' },
+          (url, headers) => upstreamJson(url, headers)
+        )
+        const n2 = fb2.items.map(normalize).filter(Boolean)
+        if (n2.length) {
+          result = fb2
+          normalized = n2
+          pkFallback = 'q-only'
+        }
+      } catch {}
+    }
     res.setHeader('X-Provider', result.provider)
     res.setHeader('X-Provider-Attempts', result.attempts?.join(',') || result.provider)
     if (result.attemptsDetail)
       res.setHeader('X-Provider-Attempts-Detail', result.attemptsDetail.join(','))
     res.setHeader('X-PK-Domains', useDomains.join(','))
+    if (pkFallback) res.setHeader('X-PK-Fallback', pkFallback)
     res.setHeader('X-Provider-Articles', String(normalized.length))
     setCache(cacheKey, {
       items: normalized,
@@ -103,6 +145,7 @@ export default async function handler(req: any, res: any) {
           noCache,
           category,
           domains: useDomains,
+          fallback: pkFallback || null,
         },
       })
     }
