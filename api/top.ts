@@ -26,7 +26,7 @@ export default async function handler(req: any, res: any) {
   if (req.method === 'OPTIONS') return res.status(204).end()
   const country = String(req.query.country || 'us')
   const rawPage = String(req.query.page || '1')
-  const rawPageSize = String(req.query.pageSize || req.query.limit || '50')
+  const rawPageSize = String(req.query.pageSize || req.query.limit || '10')
   const pageNum = Math.max(1, parseInt(rawPage, 10) || 1)
   const pageSizeNum = Math.min(100, Math.max(1, parseInt(rawPageSize, 10) || 50))
   const rawCategory = req.query.category ? String(req.query.category).toLowerCase() : 'general'

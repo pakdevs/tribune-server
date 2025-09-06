@@ -39,10 +39,11 @@ export function buildProviderRequest(p: any, intent: 'top' | 'search', opts: any
     : undefined
 
   if (p.type === 'newsdata') {
+    const pageSizeUsed = Math.min(10, pageSize)
     const params = new URLSearchParams({
       apikey: p.key,
       page: String(page),
-      page_size: String(pageSize),
+      page_size: String(pageSizeUsed),
       language: 'en',
     })
     // Filters common to both intents
@@ -103,6 +104,7 @@ export async function tryProvidersSequential(
         variants.push({ label: 'no-category', o: { ...opts, category: undefined } })
         variants.push({ label: 'no-domains-sources', o: { ...opts, domains: [], sources: [] } })
         variants.push({ label: 'no-q', o: { ...opts, q: undefined } })
+        variants.push({ label: 'no-country', o: { ...opts, country: undefined } })
         variants.push({
           label: 'minimal',
           o: { page: opts.page, pageSize: opts.pageSize, country: opts.country },
@@ -116,6 +118,16 @@ export async function tryProvidersSequential(
         if (!req) throw new Error('Unsupported request for provider')
         try {
           const json = await fetcher(req.url, req.headers)
+          // NewsData sometimes returns 200 with status: 'error' in body
+          if (p.type === 'newsdata') {
+            const statusField = String(json?.status || '').toLowerCase()
+            if (statusField && statusField !== 'success') {
+              const msg = json?.message || json?.results?.message || 'Upstream error'
+              const errAny: any = new Error(`Upstream status:${statusField} ${msg}`)
+              errAny.status = 422
+              throw errAny
+            }
+          }
           const items = req.pick(json)
           if (Array.isArray(items) && items.length) {
             recordSuccess(p.type, items.length)

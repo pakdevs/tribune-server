@@ -27,7 +27,7 @@ export default async function handler(req: any, res: any) {
   const category = allowed.has(mapped) ? mapped : 'general'
 
   const page = String(req.query.page || '1')
-  const pageSize = String(req.query.pageSize || req.query.limit || '50')
+  const pageSize = String(req.query.pageSize || req.query.limit || '10')
   // Optional filters: domains, sources
   const domains = String(req.query.domains || '')
     .split(',')
