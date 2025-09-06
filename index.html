@@ -60,15 +60,13 @@
             <a href="https://tribune-server.vercel.app/api/world"
               >https://tribune-server.vercel.app/api/world</a
             >
-            <span class="muted">(NewsAPI top headlines, world)</span>
+            <span class="muted">(NewsData.io provider)</span>
           </li>
           <li>
             <a href="https://tribune-server.vercel.app/api/pk"
               >https://tribune-server.vercel.app/api/pk</a
             >
-            <span class="muted"
-              >(NewsAPI everything: Pakistan-focused; domain-scoped by default)</span
-            >
+            <span class="muted">(NewsData.io with country=pk; optional domains/sources)</span>
           </li>
           <li>
             <a href="https://tribune-server.vercel.app/api/search?q=test"
@@ -91,8 +89,8 @@
           </li>
           <li>
             <a
-              href="https://tribune-server.vercel.app/api/pk?domains=dawn.com,geo.tv&mode=extend&page=1&pageSize=20"
-              >https://tribune-server.vercel.app/api/pk?domains=dawn.com,geo.tv&amp;mode=extend&amp;page=1&amp;pageSize=20</a
+              href="https://tribune-server.vercel.app/api/pk?domains=dawn.com,geo.tv&page=1&pageSize=20"
+              >https://tribune-server.vercel.app/api/pk?domains=dawn.com,geo.tv&amp;page=1&amp;pageSize=20</a
             >
             <span class="muted">(override/extend default PK domains)</span>
           </li>
@@ -244,13 +242,13 @@
         <p class="muted">
           Notes:
           <br />• Category aliases: politics/world → general, tech → technology, sci → science, biz
-          → business. <br />• Pagination: page (>=1), pageSize (1–100). <br />• Provider: NewsAPI
-          (Top headlines and Everything). <br />• PK endpoints accept
-          <code>domains=</code> (comma-separated) and <code>mode=extend|replace</code> to adjust the
-          curated domain set. <br />• Search supports <code>domains</code>, <code>from</code>, and
-          <code>to</code>. <br />• Source endpoints accept <code>domain</code> (preferred) and
-          optional <code>name</code>. <br />• For testing add <code>?debug=1&amp;nocache=1</code> to
-          view request and bypass cache.
+          → business. <br />• Pagination: page (>=1), pageSize (1–100). <br />• Provider:
+          NewsData.io (Top headlines and Everything). <br />• PK endpoints accept
+          <code>domains=</code> (comma-separated) and <code>sources=</code> (comma-separated
+          NewsData source IDs) to filter curated domain set. <br />• Search supports
+          <code>domains</code>, <code>from</code>, and <code>to</code>. <br />• Source endpoints
+          accept <code>domain</code> (preferred) and optional <code>name</code>. <br />• For testing
+          add <code>?debug=1&amp;nocache=1</code> to view request and bypass cache.
         </p>
         <p><strong>Open source websites (Pakistan)</strong></p>
         <ul>

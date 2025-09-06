@@ -63,6 +63,7 @@ export const normalize = (raw: RawArticle | null | undefined): NormalizedArticle
   const imageUrl = String(
     (raw as any).imageUrl ||
       (raw as any).urlToImage ||
+      (raw as any).image_url ||
       (raw as any).image ||
       (raw as any).thumbnail ||
       (raw as any).enclosure?.url ||

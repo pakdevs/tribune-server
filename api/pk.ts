@@ -2,7 +2,6 @@ import { normalize } from './_normalize.js'
 import { cors, cache, upstreamJson } from './_shared.js'
 import { makeKey, getFresh, getStale, setCache } from './_cache.js'
 import { getProvidersForPK, tryProvidersSequential } from './_providers.js'
-import { PK_DOMAINS } from './pk/_domains.js'
 import { getInFlight, setInFlight } from './_inflight.js'
 
 export default async function handler(req: any, res: any) {
@@ -13,19 +12,16 @@ export default async function handler(req: any, res: any) {
   const pageNum = Math.max(1, parseInt(rawPage, 10) || 1)
   const pageSizeNum = Math.min(100, Math.max(1, parseInt(rawPageSize, 10) || 50))
   const country = 'pk'
-  // Domains control: default to curated PK outlets, allow extend/replace via query
-  const domainsParam = String(req.query.domains || '').trim()
-  const mode = String(req.query.mode || 'extend').toLowerCase()
-  const userDomains = domainsParam
-    ? domainsParam
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean)
-    : []
-  const useDomains =
-    mode === 'replace' && userDomains.length
-      ? Array.from(new Set(userDomains))
-      : Array.from(new Set([...PK_DOMAINS, ...userDomains]))
+  // Optional filters: domains (domain= in NewsData), sources (source_id), q
+  const domains = String(req.query.domains || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  const sources = String(req.query.sources || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  const q = String(req.query.q || '').trim()
   try {
     const cacheKey = makeKey([
       'pk',
@@ -33,7 +29,7 @@ export default async function handler(req: any, res: any) {
       country,
       String(pageNum),
       String(pageSizeNum),
-      'd:' + useDomains.join(','),
+      'd:' + domains.join(','),
     ])
     const noCache = String(req.query.nocache || '0') === '1'
     if (!noCache) {
@@ -52,9 +48,9 @@ export default async function handler(req: any, res: any) {
     // Miss path: attempt providers with in-flight dedupe
     res.setHeader('X-Cache', 'MISS')
     const providers = getProvidersForPK()
-    const flightKey = `pk:${country}:${String(pageNum)}:${String(pageSizeNum)}:d:${useDomains.join(
+    const flightKey = `pk:${country}:${String(pageNum)}:${String(pageSizeNum)}:d:${domains.join(
       ','
-    )}`
+    )}:s:${sources.join(',')}:q:${q}`
     let flight = getInFlight(flightKey)
     if (!flight) {
       flight = setInFlight(
@@ -62,54 +58,19 @@ export default async function handler(req: any, res: any) {
         tryProvidersSequential(
           providers,
           'top',
-          { page: pageNum, pageSize: pageSizeNum, country, domains: useDomains },
+          { page: pageNum, pageSize: pageSizeNum, country, domains, sources, q },
           (url, headers) => upstreamJson(url, headers)
         )
       )
     }
-    let result = await flight
-    let normalized = result.items.map(normalize).filter(Boolean)
-    let pkFallback: string | undefined
-    // Fallback 1: if no items, try with domains + q=Pakistan
-    if (!normalized.length) {
-      try {
-        const fb1 = await tryProvidersSequential(
-          providers,
-          'top',
-          { page: pageNum, pageSize: pageSizeNum, country, domains: useDomains, q: 'Pakistan' },
-          (url, headers) => upstreamJson(url, headers)
-        )
-        const n1 = fb1.items.map(normalize).filter(Boolean)
-        if (n1.length) {
-          result = fb1
-          normalized = n1
-          pkFallback = 'domains+q'
-        }
-      } catch {}
-    }
-    // Fallback 2: if still empty, try q=Pakistan with no domains
-    if (!normalized.length) {
-      try {
-        const fb2 = await tryProvidersSequential(
-          providers,
-          'top',
-          { page: pageNum, pageSize: pageSizeNum, country, q: 'Pakistan' },
-          (url, headers) => upstreamJson(url, headers)
-        )
-        const n2 = fb2.items.map(normalize).filter(Boolean)
-        if (n2.length) {
-          result = fb2
-          normalized = n2
-          pkFallback = 'q-only'
-        }
-      } catch {}
-    }
+    const result = await flight
+    const normalized = result.items.map(normalize).filter(Boolean)
     res.setHeader('X-Provider', result.provider)
     res.setHeader('X-Provider-Attempts', result.attempts?.join(',') || result.provider)
     if (result.attemptsDetail)
       res.setHeader('X-Provider-Attempts-Detail', result.attemptsDetail.join(','))
-    res.setHeader('X-PK-Domains', useDomains.join(','))
-    if (pkFallback) res.setHeader('X-PK-Fallback', pkFallback)
+    if (domains.length) res.setHeader('X-PK-Domains', domains.join(','))
+    if (sources.length) res.setHeader('X-PK-Sources', sources.join(','))
     res.setHeader('X-Provider-Articles', String(normalized.length))
     setCache(cacheKey, {
       items: normalized,
@@ -130,8 +91,10 @@ export default async function handler(req: any, res: any) {
           attemptsDetail: result.attemptsDetail,
           cacheKey,
           noCache,
-          domains: useDomains,
-          fallback: pkFallback || null,
+          country,
+          domains,
+          sources,
+          q: q || null,
         },
       })
     }
@@ -146,7 +109,7 @@ export default async function handler(req: any, res: any) {
       country,
       String(pageNum),
       String(pageSizeNum),
-      'd:' + useDomains.join(','),
+      'd:' + domains.join(','),
     ])
     const stale = getStale(cacheKey)
     if (stale) {

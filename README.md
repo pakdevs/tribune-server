@@ -6,12 +6,12 @@ Production-focused serverless API aggregator providing normalized news articles 
 
 | Purpose                         | Route                            | Notes                                                                        |
 | ------------------------------- | -------------------------------- | ---------------------------------------------------------------------------- |
-| World mixed headlines           | `GET /api/world`                 | Backed by NewsAPI Top Headlines                                              |
-| Pakistan headlines              | `GET /api/pk`                    | Backed by NewsAPI Everything (q=Pakistan)                                    |
+| World mixed headlines           | `GET /api/world`                 | Backed by NewsData.io (country/category filters)                             |
+| Pakistan headlines              | `GET /api/pk`                    | Backed by NewsData.io (country=pk; supports domains and source filters)      |
 | World category                  | `GET /api/world/category/{slug}` | Slugs: business, entertainment, general, health, science, sports, technology |
 | Pakistan category               | `GET /api/pk/category/{slug}`    | Same slug set; fallback logic applies                                        |
 | US Top (legacy single provider) | `GET /api/top`                   | Deprecated                                                                   |
-| Search (global)                 | `GET /api/search?q=term`         | Backed by NewsAPI Everything (domains filter supported)                      |
+| Search (global)                 | `GET /api/search?q=term`         | Backed by NewsData.io (domain/source filters supported)                      |
 | Provider stats (ephemeral)      | `GET /api/stats`                 | In-memory counts (resets on cold start)                                      |
 
 All successful responses: `{ items: Article[] }` (empty array if no matches). Errors: `{ error: string, message? }`.
@@ -46,29 +46,28 @@ Examples:
 
 Set only in Vercel (never commit keys):
 
-`NEWSAPI_ORG` (preferred) or `NEWSAPI_KEY` (legacy)
+`NEWSDATA_API`
 
 Local development: create a `.env` file in this folder with:
 
 ```
-NEWSAPI_ORG=your_newsapi_key_here
+NEWSDATA_API=your_newsdata_api_key_here
 ```
 
 The server loads it automatically via `dotenv` only in local runs.
-The server uses NewsAPI.org. Keys are never exposed to the client.
+The server uses NewsData.io. Keys are never exposed to the client.
 
-### Pakistan feed domain scoping
+### Pakistan feed filters
 
-NewsAPI does not support `country=pk` on Top Headlines. To keep PK feed focused on Pakistani outlets, `/api/pk` and `/api/pk/category/{slug}` default to a curated domains allowlist.
+PK endpoints use `country=pk` and support optional filters:
 
-- Override/extend domains:
-  - `?domains=dawn.com,tribune.com.pk` to add more.
-  - `?mode=replace&domains=dawn.com,tribune.com.pk` to replace the list entirely.
-- Debug header: responses include `X-PK-Domains` with the effective list.
+- `domains`: comma-separated hostnames (NewsData `domain`)
+- `sources`: comma-separated source IDs (NewsData `source_id`)
+- `q`: keyword(s) to refine results
 
 ## Provider Strategy
 
-- Single provider: NewsAPI.org. Top headlines uses /v2/top-headlines (cannot combine sources with country/category); Search uses /v2/everything with optional `domains` and time sorting.
+- Provider: NewsData.io. Endpoints use `/api/1/news` with `country`, `category`, `q`, and optional `domain` and `source_id` filters.
 
 ## Category & Aliases
 

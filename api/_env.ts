@@ -2,11 +2,9 @@
 // env vars are provided by the platform and this import is a no-op.
 import 'dotenv/config'
 
-export function getNewsApiKey(): string | undefined {
-  // Primary key (preferred)
-  if ((process as any).env.NEWSAPI_ORG) return (process as any).env.NEWSAPI_ORG
-  // Backwards-compatible fallbacks
-  if ((process as any).env.NEWSAPI_KEY) return (process as any).env.NEWSAPI_KEY
-  if ((process as any).env.NEWS_API_KEY) return (process as any).env.NEWS_API_KEY
+// Primary provider key for NewsData.io
+export function getNewsDataApiKey(): string | undefined {
+  if ((process as any).env.NEWSDATA_API) return (process as any).env.NEWSDATA_API
+  // Legacy fallbacks (none for NewsData.io); return undefined if missing
   return undefined
 }
