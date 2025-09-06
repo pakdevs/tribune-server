@@ -112,33 +112,33 @@
         <p class="muted">General format:</p>
         <ul>
           <li>
-            <code class="mono">/api/world/source/{slug}?name=...</code>
+            <code class="mono">/api/world/source/{slug}?domain=...</code>
           </li>
           <li>
-            <code class="mono">/api/pk/source/{slug}?name=...</code>
+            <code class="mono">/api/pk/source/{slug}?domain=...</code>
           </li>
         </ul>
         <p><strong>World sources (examples)</strong></p>
         <ul>
-          <li><a href="https://tribune-server.vercel.app/api/world/source/cnn?name=CNN">CNN</a></li>
           <li>
-            <a href="https://tribune-server.vercel.app/api/world/source/reuters?name=Reuters"
+            <a href="https://tribune-server.vercel.app/api/world/source/cnn?domain=cnn.com">CNN</a>
+          </li>
+          <li>
+            <a href="https://tribune-server.vercel.app/api/world/source/reuters?domain=reuters.com"
               >Reuters</a
             >
           </li>
           <li>
-            <a href="https://tribune-server.vercel.app/api/world/source/ap?name=Associated%20Press"
-              >AP</a
-            >
+            <a href="https://tribune-server.vercel.app/api/world/source/ap?domain=apnews.com">AP</a>
           </li>
           <li>
-            <a href="https://tribune-server.vercel.app/api/world/source/bbc-news?name=BBC%20News"
+            <a href="https://tribune-server.vercel.app/api/world/source/bbc-news?domain=bbc.com"
               >BBC News</a
             >
           </li>
           <li>
             <a
-              href="https://tribune-server.vercel.app/api/world/source/the-guardian?name=The%20Guardian&domain=theguardian.com"
+              href="https://tribune-server.vercel.app/api/world/source/the-guardian?domain=theguardian.com"
               >The Guardian</a
             >
           </li>
@@ -146,25 +146,21 @@
         <p><strong>Pakistan sources (examples)</strong></p>
         <ul>
           <li>
-            <a href="https://tribune-server.vercel.app/api/pk/source/dawn?name=Dawn&domain=dawn.com"
-              >Dawn</a
-            >
+            <a href="https://tribune-server.vercel.app/api/pk/source/dawn?domain=dawn.com">Dawn</a>
           </li>
           <li>
-            <a
-              href="https://tribune-server.vercel.app/api/pk/source/geo-news?name=Geo%20News&domain=geo.tv"
+            <a href="https://tribune-server.vercel.app/api/pk/source/geo-news?domain=geo.tv"
               >Geo News</a
             >
           </li>
           <li>
             <a
-              href="https://tribune-server.vercel.app/api/pk/source/express-tribune?name=Express%20Tribune&domain=tribune.com.pk"
+              href="https://tribune-server.vercel.app/api/pk/source/express-tribune?domain=tribune.com.pk"
               >Express Tribune</a
             >
           </li>
           <li>
-            <a
-              href="https://tribune-server.vercel.app/api/pk/source/the-news?name=The%20News&domain=thenews.com.pk"
+            <a href="https://tribune-server.vercel.app/api/pk/source/the-news?domain=thenews.com.pk"
               >The News</a
             >
           </li>
@@ -252,9 +248,9 @@
           (Top headlines and Everything). <br />• PK endpoints accept
           <code>domains=</code> (comma-separated) and <code>mode=extend|replace</code> to adjust the
           curated domain set. <br />• Search supports <code>domains</code>, <code>from</code>, and
-          <code>to</code>. <br />• Source endpoints accept <code>name</code> and optional
-          <code>domain</code> for better matching. <br />• For testing add
-          <code>?debug=1&amp;nocache=1</code> to view request and bypass cache.
+          <code>to</code>. <br />• Source endpoints accept <code>domain</code> (preferred) and
+          optional <code>name</code>. <br />• For testing add <code>?debug=1&amp;nocache=1</code> to
+          view request and bypass cache.
         </p>
         <p><strong>Open source websites (Pakistan)</strong></p>
         <ul>
