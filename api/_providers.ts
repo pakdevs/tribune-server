@@ -58,7 +58,8 @@ export function buildProviderRequest(p: any, intent: 'top' | 'search', opts: any
       params.set('category', category)
     }
 
-    const base = intent === 'top' ? 'https://newsdata.io/api/1/latest' : 'https://newsdata.io/api/1/news'
+    const base =
+      intent === 'top' ? 'https://newsdata.io/api/1/latest' : 'https://newsdata.io/api/1/news'
     const url = `${base}?${params.toString()}`
     return { url, headers: {}, pick: (data: any) => data?.results || data?.articles || [] }
   }
