@@ -57,39 +57,54 @@
         <p>API endpoints:</p>
         <ul>
           <li>
-            <a href="/api/world">/api/world</a>
+            <a href="https://tribune-server.vercel.app/api/world"
+              >https://tribune-server.vercel.app/api/world</a
+            >
             <span class="muted">(NewsAPI top headlines, world)</span>
           </li>
           <li>
-            <a href="/api/pk">/api/pk</a>
+            <a href="https://tribune-server.vercel.app/api/pk"
+              >https://tribune-server.vercel.app/api/pk</a
+            >
             <span class="muted"
               >(NewsAPI everything: Pakistan-focused; domain-scoped by default)</span
             >
           </li>
           <li>
-            <a href="/api/search?q=test">/api/search?q=test</a>
+            <a href="https://tribune-server.vercel.app/api/search?q=test"
+              >https://tribune-server.vercel.app/api/search?q=test</a
+            >
             <span class="muted">(supports domains, from, to)</span>
           </li>
         </ul>
         <p>Examples:</p>
         <ul>
-          <li><a href="/api/world?page=1&pageSize=20">/api/world?page=1&amp;pageSize=20</a></li>
-          <li><a href="/api/pk?page=1&pageSize=20">/api/pk?page=1&amp;pageSize=20</a></li>
           <li>
-            <a href="/api/pk?domains=dawn.com,geo.tv&mode=extend&page=1&pageSize=20"
-              >/api/pk?domains=dawn.com,geo.tv&amp;mode=extend&amp;page=1&amp;pageSize=20</a
+            <a href="https://tribune-server.vercel.app/api/world?page=1&pageSize=20"
+              >https://tribune-server.vercel.app/api/world?page=1&amp;pageSize=20</a
             >
-            <span class="muted">(override/extend default PK domains)</span>
           </li>
           <li>
-            <a href="/api/search?q=pakistan&page=1&pageSize=20"
-              >/api/search?q=pakistan&amp;page=1&amp;pageSize=20</a
+            <a href="https://tribune-server.vercel.app/api/pk?page=1&pageSize=20"
+              >https://tribune-server.vercel.app/api/pk?page=1&amp;pageSize=20</a
             >
           </li>
           <li>
             <a
-              href="/api/search?q=economy&domains=theguardian.com,reuters.com&from=2024-01-01&to=2024-12-31&page=1&pageSize=20"
-              >/api/search?q=economy&amp;domains=theguardian.com,reuters.com&amp;from=2024-01-01&amp;to=2024-12-31&amp;page=1&amp;pageSize=20</a
+              href="https://tribune-server.vercel.app/api/pk?domains=dawn.com,geo.tv&mode=extend&page=1&pageSize=20"
+              >https://tribune-server.vercel.app/api/pk?domains=dawn.com,geo.tv&amp;mode=extend&amp;page=1&amp;pageSize=20</a
+            >
+            <span class="muted">(override/extend default PK domains)</span>
+          </li>
+          <li>
+            <a href="https://tribune-server.vercel.app/api/search?q=pakistan&page=1&pageSize=20"
+              >https://tribune-server.vercel.app/api/search?q=pakistan&amp;page=1&amp;pageSize=20</a
+            >
+          </li>
+          <li>
+            <a
+              href="https://tribune-server.vercel.app/api/search?q=economy&domains=theguardian.com,reuters.com&from=2024-01-01&to=2024-12-31&page=1&pageSize=20"
+              >https://tribune-server.vercel.app/api/search?q=economy&amp;domains=theguardian.com,reuters.com&amp;from=2024-01-01&amp;to=2024-12-31&amp;page=1&amp;pageSize=20</a
             >
           </li>
         </ul>
@@ -105,52 +120,130 @@
         </ul>
         <p><strong>World sources (examples)</strong></p>
         <ul>
-          <li><a href="/api/world/source/cnn?name=CNN">CNN</a></li>
-          <li><a href="/api/world/source/reuters?name=Reuters">Reuters</a></li>
+          <li><a href="https://tribune-server.vercel.app/api/world/source/cnn?name=CNN">CNN</a></li>
           <li>
-            <a href="/api/world/source/ap?name=Associated%20Press">AP</a>
+            <a href="https://tribune-server.vercel.app/api/world/source/reuters?name=Reuters"
+              >Reuters</a
+            >
           </li>
           <li>
-            <a href="/api/world/source/bbc-news?name=BBC%20News">BBC News</a>
+            <a href="https://tribune-server.vercel.app/api/world/source/ap?name=Associated%20Press"
+              >AP</a
+            >
           </li>
           <li>
-            <a href="/api/world/source/the-guardian?name=The%20Guardian&domain=theguardian.com"
+            <a href="https://tribune-server.vercel.app/api/world/source/bbc-news?name=BBC%20News"
+              >BBC News</a
+            >
+          </li>
+          <li>
+            <a
+              href="https://tribune-server.vercel.app/api/world/source/the-guardian?name=The%20Guardian&domain=theguardian.com"
               >The Guardian</a
             >
           </li>
         </ul>
         <p><strong>Pakistan sources (examples)</strong></p>
         <ul>
-          <li><a href="/api/pk/source/dawn?name=Dawn&domain=dawn.com">Dawn</a></li>
-          <li><a href="/api/pk/source/geo-news?name=Geo%20News&domain=geo.tv">Geo News</a></li>
           <li>
-            <a href="/api/pk/source/express-tribune?name=Express%20Tribune&domain=tribune.com.pk"
+            <a href="https://tribune-server.vercel.app/api/pk/source/dawn?name=Dawn&domain=dawn.com"
+              >Dawn</a
+            >
+          </li>
+          <li>
+            <a
+              href="https://tribune-server.vercel.app/api/pk/source/geo-news?name=Geo%20News&domain=geo.tv"
+              >Geo News</a
+            >
+          </li>
+          <li>
+            <a
+              href="https://tribune-server.vercel.app/api/pk/source/express-tribune?name=Express%20Tribune&domain=tribune.com.pk"
               >Express Tribune</a
             >
           </li>
           <li>
-            <a href="/api/pk/source/the-news?name=The%20News&domain=thenews.com.pk">The News</a>
+            <a
+              href="https://tribune-server.vercel.app/api/pk/source/the-news?name=The%20News&domain=thenews.com.pk"
+              >The News</a
+            >
           </li>
         </ul>
         <p><strong>Categories (World)</strong></p>
         <ul>
-          <li><a href="/api/world/category/business">/api/world/category/business</a></li>
-          <li><a href="/api/world/category/entertainment">/api/world/category/entertainment</a></li>
-          <li><a href="/api/world/category/general">/api/world/category/general</a></li>
-          <li><a href="/api/world/category/health">/api/world/category/health</a></li>
-          <li><a href="/api/world/category/science">/api/world/category/science</a></li>
-          <li><a href="/api/world/category/sports">/api/world/category/sports</a></li>
-          <li><a href="/api/world/category/technology">/api/world/category/technology</a></li>
+          <li>
+            <a href="https://tribune-server.vercel.app/api/world/category/business"
+              >https://tribune-server.vercel.app/api/world/category/business</a
+            >
+          </li>
+          <li>
+            <a href="https://tribune-server.vercel.app/api/world/category/entertainment"
+              >https://tribune-server.vercel.app/api/world/category/entertainment</a
+            >
+          </li>
+          <li>
+            <a href="https://tribune-server.vercel.app/api/world/category/general"
+              >https://tribune-server.vercel.app/api/world/category/general</a
+            >
+          </li>
+          <li>
+            <a href="https://tribune-server.vercel.app/api/world/category/health"
+              >https://tribune-server.vercel.app/api/world/category/health</a
+            >
+          </li>
+          <li>
+            <a href="https://tribune-server.vercel.app/api/world/category/science"
+              >https://tribune-server.vercel.app/api/world/category/science</a
+            >
+          </li>
+          <li>
+            <a href="https://tribune-server.vercel.app/api/world/category/sports"
+              >https://tribune-server.vercel.app/api/world/category/sports</a
+            >
+          </li>
+          <li>
+            <a href="https://tribune-server.vercel.app/api/world/category/technology"
+              >https://tribune-server.vercel.app/api/world/category/technology</a
+            >
+          </li>
         </ul>
         <p><strong>Categories (Pakistan)</strong></p>
         <ul>
-          <li><a href="/api/pk/category/business">/api/pk/category/business</a></li>
-          <li><a href="/api/pk/category/entertainment">/api/pk/category/entertainment</a></li>
-          <li><a href="/api/pk/category/general">/api/pk/category/general</a></li>
-          <li><a href="/api/pk/category/health">/api/pk/category/health</a></li>
-          <li><a href="/api/pk/category/science">/api/pk/category/science</a></li>
-          <li><a href="/api/pk/category/sports">/api/pk/category/sports</a></li>
-          <li><a href="/api/pk/category/technology">/api/pk/category/technology</a></li>
+          <li>
+            <a href="https://tribune-server.vercel.app/api/pk/category/business"
+              >https://tribune-server.vercel.app/api/pk/category/business</a
+            >
+          </li>
+          <li>
+            <a href="https://tribune-server.vercel.app/api/pk/category/entertainment"
+              >https://tribune-server.vercel.app/api/pk/category/entertainment</a
+            >
+          </li>
+          <li>
+            <a href="https://tribune-server.vercel.app/api/pk/category/general"
+              >https://tribune-server.vercel.app/api/pk/category/general</a
+            >
+          </li>
+          <li>
+            <a href="https://tribune-server.vercel.app/api/pk/category/health"
+              >https://tribune-server.vercel.app/api/pk/category/health</a
+            >
+          </li>
+          <li>
+            <a href="https://tribune-server.vercel.app/api/pk/category/science"
+              >https://tribune-server.vercel.app/api/pk/category/science</a
+            >
+          </li>
+          <li>
+            <a href="https://tribune-server.vercel.app/api/pk/category/sports"
+              >https://tribune-server.vercel.app/api/pk/category/sports</a
+            >
+          </li>
+          <li>
+            <a href="https://tribune-server.vercel.app/api/pk/category/technology"
+              >https://tribune-server.vercel.app/api/pk/category/technology</a
+            >
+          </li>
         </ul>
         <p class="muted">
           Notes:
@@ -163,6 +256,58 @@
           <code>domain</code> for better matching. <br />• For testing add
           <code>?debug=1&amp;nocache=1</code> to view request and bypass cache.
         </p>
+        <p><strong>Open source websites (Pakistan)</strong></p>
+        <ul>
+          <li><a href="https://www.dawn.com" target="_blank" rel="noopener">dawn.com</a></li>
+          <li><a href="https://www.geo.tv" target="_blank" rel="noopener">geo.tv</a></li>
+          <li>
+            <a href="https://tribune.com.pk" target="_blank" rel="noopener">tribune.com.pk</a>
+          </li>
+          <li>
+            <a href="https://www.thenews.com.pk" target="_blank" rel="noopener">thenews.com.pk</a>
+          </li>
+          <li><a href="https://arynews.tv" target="_blank" rel="noopener">arynews.tv</a></li>
+          <li><a href="https://www.samaa.tv" target="_blank" rel="noopener">samaa.tv</a></li>
+          <li>
+            <a href="https://www.pakistantoday.com.pk" target="_blank" rel="noopener"
+              >pakistantoday.com.pk</a
+            >
+          </li>
+          <li>
+            <a href="https://www.brecorder.com" target="_blank" rel="noopener">brecorder.com</a>
+          </li>
+          <li>
+            <a href="https://dailytimes.com.pk" target="_blank" rel="noopener">dailytimes.com.pk</a>
+          </li>
+          <li><a href="https://nation.com.pk" target="_blank" rel="noopener">nation.com.pk</a></li>
+          <li>
+            <a href="https://en.dailypakistan.com.pk" target="_blank" rel="noopener"
+              >dailypakistan.com.pk</a
+            >
+          </li>
+          <li><a href="https://www.bolnews.com" target="_blank" rel="noopener">bolnews.com</a></li>
+          <li><a href="https://humnews.pk" target="_blank" rel="noopener">humnews.pk</a></li>
+          <li><a href="https://92news.com.pk" target="_blank" rel="noopener">92news.com.pk</a></li>
+          <li>
+            <a href="https://www.thefridaytimes.com" target="_blank" rel="noopener"
+              >thefridaytimes.com</a
+            >
+          </li>
+          <li>
+            <a href="https://pakobserver.net" target="_blank" rel="noopener">pakobserver.net</a>
+          </li>
+        </ul>
+        <p><strong>Open source websites (World)</strong></p>
+        <ul>
+          <li><a href="https://www.bbc.com/news" target="_blank" rel="noopener">bbc.com</a></li>
+          <li><a href="https://www.cnn.com" target="_blank" rel="noopener">cnn.com</a></li>
+          <li><a href="https://www.reuters.com" target="_blank" rel="noopener">reuters.com</a></li>
+          <li><a href="https://apnews.com" target="_blank" rel="noopener">apnews.com</a></li>
+          <li>
+            <a href="https://www.theguardian.com" target="_blank" rel="noopener">theguardian.com</a>
+          </li>
+          <li><a href="https://www.nytimes.com" target="_blank" rel="noopener">nytimes.com</a></li>
+        </ul>
       </div>
     </div>
   </body>
