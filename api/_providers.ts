@@ -1,4 +1,5 @@
 import { recordSuccess, recordError, recordEmpty } from './_stats.js'
+import { isCoolingDown, setCooldown } from './_cooldown.js'
 import { getNewsApiKey } from './_env.js'
 
 const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n))
@@ -144,6 +145,11 @@ export async function tryProvidersSequential(
     const p = ordered[i]
     attempts.push(p.type)
     try {
+      // Skip provider if cooling down (e.g., after 429)
+      if (isCoolingDown(p.type)) {
+        attemptsDetail.push(`${p.type}(cooldown)`)
+        continue
+      }
       const req = buildProviderRequest(p, intent, opts)
       if (!req) throw new Error('Unsupported request for provider')
       const json = await fetcher(req.url, req.headers)
@@ -160,6 +166,15 @@ export async function tryProvidersSequential(
       recordError(p.type, e?.message || String(e))
       if (!attemptsDetail[attemptsDetail.length - 1]?.startsWith(p.type + '(')) {
         attemptsDetail.push(`${p.type}(err)`)
+      }
+      // If upstream rate limited, set a short cooldown to avoid hammering
+      const status = e?.status || (/\b(\d{3})\b/.exec(String(e?.message))?.[1] ?? '')
+      if (String(status) === '429') {
+        const retryAfter = parseInt(String(e?.retryAfter || ''), 10)
+        setCooldown(
+          p.type,
+          Number.isFinite(retryAfter) ? Math.min(Math.max(retryAfter, 10), 120) : 30
+        )
       }
       errors.push(`${p.type}: ${e?.message || e}`)
     }

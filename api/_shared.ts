@@ -34,6 +34,12 @@ export async function upstreamJson(
   const r = await fetch(url, { headers, signal: controller.signal }).finally(() =>
     clearTimeout(timeoutId)
   )
-  if (!r.ok) throw new Error(`Upstream ${r.status}`)
+  if (!r.ok) {
+    const err: any = new Error(`Upstream ${r.status}`)
+    err.status = r.status
+    const ra = r.headers.get('retry-after')
+    if (ra) err.retryAfter = ra
+    throw err
+  }
   return r.json()
 }
