@@ -1,6 +1,13 @@
 import { recordSuccess, recordError, recordEmpty } from './_stats.js'
 import { isCoolingDown, setCooldown } from './_cooldown.js'
-import { getNewsDataApiKey, getWebzApiKey, getWebzUseLite } from './_env.js'
+import {
+  getNewsDataApiKey,
+  getWebzApiKey,
+  getWebzUseLite,
+  getWebzDailyLimit,
+  getWebzCallCost,
+} from './_env.js'
+import { canSpend, spend, getUsedToday } from './_budget.js'
 
 const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n))
 
@@ -131,6 +138,7 @@ export async function tryProvidersSequential(
   const errors: string[] = []
   const attempts: string[] = []
   const attemptsDetail: string[] = []
+  const errorDetails: string[] = []
   if (!providers.length) {
     const keyPresent = Boolean(getNewsDataApiKey())
     const hint = keyPresent
@@ -157,6 +165,16 @@ export async function tryProvidersSequential(
       if (isCoolingDown(p.type)) {
         attemptsDetail.push(`${p.type}(cooldown)`)
         continue
+      }
+      // Budget gating for Webz
+      if (p.type === 'webz') {
+        const limit = getWebzDailyLimit()
+        const cost = getWebzCallCost()
+        const gate = canSpend('webz', limit, cost)
+        if (!gate.ok) {
+          attemptsDetail.push(`webz(skipped:${gate.reason})`)
+          continue
+        }
       }
       // Build attempt variants for NewsData to reduce 422/empty cases
       const variants: Array<{ label: string; o: any }> = []
@@ -188,6 +206,10 @@ export async function tryProvidersSequential(
         lastAttemptUrl = req.url
         try {
           const json = await fetcher(req.url, req.headers)
+          // spend budget for Webz on each outward call
+          if (p.type === 'webz') {
+            spend('webz', getWebzCallCost())
+          }
           // NewsData sometimes returns 200 with status: 'error' in body
           if (p.type === 'newsdata') {
             const statusField = String(json?.status || '').toLowerCase()
@@ -198,10 +220,41 @@ export async function tryProvidersSequential(
               throw errAny
             }
           }
-          const items = req.pick(json)
+          let items = req.pick(json)
           if (Array.isArray(items) && items.length) {
             recordSuccess(p.type, items.length)
             attemptsDetail.push(`${p.type}:${label}(ok:${items.length})`)
+            // Webz Lite pagination via next URL
+            if (p.type === 'webz' && getWebzUseLite()) {
+              const needMore = Math.max(0, (o?.pageSize || opts.pageSize || 0) - items.length)
+              const pageNum = Math.max(1, parseInt(String(o?.page || opts.page || '1'), 10) || 1)
+              // For Lite, each call returns up to 10; emulate page N by following next N-1 times
+              let nextUrl: string | undefined = (json &&
+                (json.next || json.nextPage || json.next_page)) as any
+              let currentPage = 1
+              while (needMore > 0 && nextUrl && currentPage < pageNum) {
+                try {
+                  const nextJson = await fetcher(String(nextUrl), req.headers)
+                  spend('webz', getWebzCallCost())
+                  const more = req.pick(nextJson)
+                  if (Array.isArray(more) && more.length) {
+                    items = items.concat(more)
+                    nextUrl = (nextJson &&
+                      (nextJson.next || nextJson.nextPage || nextJson.next_page)) as any
+                    currentPage += 1
+                  } else {
+                    break
+                  }
+                } catch (e: any) {
+                  errorDetails.push(`${p.type}:next(err:${e?.message || e})`)
+                  break
+                }
+              }
+              // Trim to requested page/pageSize if we overshot
+              if ((o?.pageSize || opts.pageSize) && items.length > (o?.pageSize || opts.pageSize)) {
+                items = items.slice(0, o?.pageSize || opts.pageSize)
+              }
+            }
             return { items, provider: p.type, url: req.url, raw: json }
           }
           recordEmpty(p.type)
@@ -214,6 +267,8 @@ export async function tryProvidersSequential(
             attemptsDetail.push(`${p.type}:${label}(422)`) // try next variant
             return null
           }
+          attemptsDetail.push(`${p.type}:${label}(err)`) // record non-422 error
+          errorDetails.push(`${p.type}:${label}: ${msg || 'error'}`)
           throw err
         }
       }
@@ -236,7 +291,7 @@ export async function tryProvidersSequential(
     } catch (e: any) {
       recordError(p.type, e?.message || String(e))
       if (!attemptsDetail[attemptsDetail.length - 1]?.startsWith(p.type + '(')) {
-        attemptsDetail.push(`${p.type}(err)`)
+        attemptsDetail.push(`${p.type}(err)`) // ensure a provider-level error marker exists
       }
       // If upstream rate limited, set a short cooldown to avoid hammering
       const status = e?.status || (/\b(\d{3})\b/.exec(String(e?.message))?.[1] ?? '')
@@ -254,5 +309,6 @@ export async function tryProvidersSequential(
   err.details = errors
   err.attempts = attempts
   err.attemptsDetail = attemptsDetail
+  err.errors = errorDetails
   throw err
 }

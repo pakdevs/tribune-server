@@ -2,6 +2,7 @@ import { normalize } from './_normalize.js'
 import { cors, cache, upstreamJson } from './_shared.js'
 import { makeKey, getFresh, getStale, setCache } from './_cache.js'
 import { getProvidersForWorld, tryProvidersSequential } from './_providers.js'
+import { getUsedToday } from './_budget.js'
 import { getInFlight, setInFlight } from './_inflight.js'
 
 export default async function handler(req: any, res: any) {
@@ -13,8 +14,25 @@ export default async function handler(req: any, res: any) {
   const pageSizeNum = Math.min(100, Math.max(1, parseInt(rawPageSize, 10) || 50))
   let country = String(req.query.country || 'us').toLowerCase()
   if (!/^[a-z]{2}$/i.test(country)) country = 'us'
+  // Optional filters to pass to providers and enforce locally
+  const domains = String(req.query.domains || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  const sources = String(req.query.sources || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  const q = String(req.query.q || '').trim()
   try {
-    const cacheKey = makeKey(['world', 'top', country, String(pageNum), String(pageSizeNum)])
+    const cacheKey = makeKey([
+      'world',
+      'top',
+      country,
+      String(pageNum),
+      String(pageSizeNum),
+      'd:' + domains.join(','),
+    ])
     const noCache = String(req.query.nocache || '0') === '1'
     if (!noCache) {
       const fresh = getFresh(cacheKey)
@@ -32,7 +50,9 @@ export default async function handler(req: any, res: any) {
     // Miss path: attempt providers with in-flight dedupe
     res.setHeader('X-Cache', 'MISS')
     const providers = getProvidersForWorld()
-    const flightKey = `world:${country}:${String(pageNum)}:${String(pageSizeNum)}`
+    const flightKey = `world:${country}:${String(pageNum)}:${String(pageSizeNum)}:d:${domains.join(
+      ','
+    )}:s:${sources.join(',')}:q:${q}`
     let flight = getInFlight(flightKey)
     if (!flight) {
       flight = setInFlight(
@@ -40,18 +60,46 @@ export default async function handler(req: any, res: any) {
         tryProvidersSequential(
           providers,
           'top',
-          { page: pageNum, pageSize: pageSizeNum, country },
+          { page: pageNum, pageSize: pageSizeNum, country, domains, sources, q },
           (url, headers) => upstreamJson(url, headers)
         )
       )
     }
     const result = await flight
-    const normalized = result.items.map(normalize).filter(Boolean)
+    let normalized = result.items.map(normalize).filter(Boolean)
+    // Enforce domain allowlist if caller requested specific domains
+    if (domains.length) {
+      const allowed = new Set(
+        domains.map((d) =>
+          String(d)
+            .toLowerCase()
+            .replace(/^www\./, '')
+        )
+      )
+      const before = normalized.length
+      normalized = normalized.filter((n) => {
+        const host = String(n.sourceDomain || '')
+          .toLowerCase()
+          .replace(/^www\./, '')
+        return allowed.has(host)
+      })
+      res.setHeader('X-Filter-Domains-Applied', '1')
+      res.setHeader('X-Articles-PreFilter', String(before))
+      res.setHeader('X-Articles-PostFilter', String(normalized.length))
+    }
     res.setHeader('X-Provider', result.provider)
     res.setHeader('X-Provider-Attempts', result.attempts?.join(',') || result.provider)
     if (result.attemptsDetail)
       res.setHeader('X-Provider-Attempts-Detail', result.attemptsDetail.join(','))
+    if (Array.isArray((result as any).errors) && (result as any).errors.length) {
+      res.setHeader('X-Provider-Errors', (result as any).errors.join(' | '))
+    }
+    if (domains.length) res.setHeader('X-World-Domains', domains.join(','))
+    if (sources.length) res.setHeader('X-World-Sources', sources.join(','))
     res.setHeader('X-Provider-Articles', String(normalized.length))
+    try {
+      res.setHeader('X-Webz-Used-Today', String(getUsedToday('webz')))
+    } catch {}
     setCache(cacheKey, {
       items: normalized,
       meta: {
@@ -69,8 +117,13 @@ export default async function handler(req: any, res: any) {
           url: result.url,
           attempts: result.attempts,
           attemptsDetail: result.attemptsDetail,
+          errors: (result as any).errors,
           cacheKey,
           noCache,
+          country,
+          domains,
+          sources,
+          q: q || null,
         },
       })
     }
@@ -81,7 +134,18 @@ export default async function handler(req: any, res: any) {
     const rawPageSize = String(req.query.pageSize || req.query.limit || '50')
     const pageNum = Math.max(1, parseInt(rawPage, 10) || 1)
     const pageSizeNum = Math.min(100, Math.max(1, parseInt(rawPageSize, 10) || 50))
-    const cacheKey = makeKey(['world', 'top', country, String(pageNum), String(pageSizeNum)])
+    const domains = String(req.query.domains || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+    const cacheKey = makeKey([
+      'world',
+      'top',
+      country,
+      String(pageNum),
+      String(pageSizeNum),
+      'd:' + domains.join(','),
+    ])
     const stale = getStale(cacheKey)
     if (stale) {
       res.setHeader('X-Cache', 'STALE')

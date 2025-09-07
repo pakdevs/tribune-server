@@ -2,6 +2,7 @@ import { normalize } from './_normalize.js'
 import { cors, cache, upstreamJson } from './_shared.js'
 import { makeKey, getFresh, getStale, setCache } from './_cache.js'
 import { getProvidersForPK, tryProvidersSequential } from './_providers.js'
+import { getUsedToday } from './_budget.js'
 import { getInFlight, setInFlight } from './_inflight.js'
 
 export default async function handler(req: any, res: any) {
@@ -92,6 +93,10 @@ export default async function handler(req: any, res: any) {
     if (domains.length) res.setHeader('X-PK-Domains', domains.join(','))
     if (sources.length) res.setHeader('X-PK-Sources', sources.join(','))
     res.setHeader('X-Provider-Articles', String(normalized.length))
+    // Budget usage observability (Webz)
+    try {
+      res.setHeader('X-Webz-Used-Today', String(getUsedToday('webz')))
+    } catch {}
     setCache(cacheKey, {
       items: normalized,
       meta: {

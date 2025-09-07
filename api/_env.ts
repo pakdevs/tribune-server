@@ -22,3 +22,20 @@ export function getWebzUseLite(): boolean {
   const s = String(v).trim().toLowerCase()
   return s === '1' || s === 'true' || s === 'yes'
 }
+
+// Daily request budget for Webz to preserve the 1000/month quota.
+// Example: WEBZ_DAILY_LIMIT=25 (roughly ~750/month)
+export function getWebzDailyLimit(): number {
+  const v = (process as any).env.WEBZ_DAILY_LIMIT
+  if (v === undefined) return 30 // conservative default
+  const n = Number(v)
+  return Number.isFinite(n) ? n : 30
+}
+
+// Logical cost per Webz call (Lite). Default 1. Can be tuned if we count next-page fetches as extra.
+export function getWebzCallCost(): number {
+  const v = (process as any).env.WEBZ_CALL_COST
+  if (v === undefined) return 1
+  const n = Number(v)
+  return Number.isFinite(n) ? Math.max(1, Math.floor(n)) : 1
+}
