@@ -2,6 +2,7 @@ import { normalize } from '../../_normalize.js'
 import { cors, cache } from '../../_shared.js'
 import { makeKey, getFresh, getStale, setCache } from '../../_cache.js'
 import { getProvidersForWorld, buildProviderRequest } from '../../_providers.js'
+import { getSourceDomains } from '../../_sourceDomains.js'
 import { getInFlight, setInFlight } from '../../_inflight.js'
 
 const slugify = (s = '') =>
@@ -15,7 +16,7 @@ export default async function handler(req: any, res: any) {
   if (req.method === 'OPTIONS') return res.status(204).end()
   const slug = slugify(req.query.slug || '')
   const name = String(req.query.name || '').trim()
-  // Accept domain(s) for strict source filtering
+  // Accept domain(s) for strict source filtering; fallback to mapped domains by slug/name
   const domainsParam = String(req.query.domain || req.query.domains || '')
     .split(',')
     .map((s) => s.trim())
@@ -35,13 +36,17 @@ export default async function handler(req: any, res: any) {
 
   let q = name ? `"${name}"` : slug
 
+  // Compute mapped domains if none provided
+  const mappedDomains = domainsParam.length ? [] : getSourceDomains('world', slug, name)
+  const targetDomains = domainsParam.length ? domainsParam : mappedDomains
+
   try {
     const cacheKey = makeKey([
       'source',
       'world',
       slug,
       name,
-      domainsParam.join(',') || '',
+      targetDomains.join(',') || '',
       country,
       String(pageNum),
       String(pageSizeNum),
@@ -65,12 +70,12 @@ export default async function handler(req: any, res: any) {
 
     res.setHeader('X-Cache', 'MISS')
     let providers = getProvidersForWorld()
-    if (domainsParam.length) {
+    if (targetDomains.length) {
       providers = [...providers].sort((a, b) =>
         a.type === 'webz' ? -1 : b.type === 'webz' ? 1 : 0
       )
     }
-    const flightKey = `source:world:${slug}:${name}:${domainsParam.join(',')}:${country}:${String(
+    const flightKey = `source:world:${slug}:${name}:${targetDomains.join(',')}:${country}:${String(
       pageNum
     )}:${String(pageSizeNum)}:${from || ''}:${to || ''}`
     let flight = getInFlight(flightKey)
@@ -84,7 +89,7 @@ export default async function handler(req: any, res: any) {
           const targetSlug = slug
           const nameLower = name.toLowerCase()
           const allowedDomains = new Set(
-            domainsParam.map((d) => d.toLowerCase().replace(/^www\./, ''))
+            targetDomains.map((d) => d.toLowerCase().replace(/^www\./, ''))
           )
           for (const p of ordered) {
             attempts.push(p.type)
@@ -97,10 +102,10 @@ export default async function handler(req: any, res: any) {
                 sources?: string[]
               }> = []
               const nameSlug = nameLower ? slugify(nameLower) : ''
-              if (domainsParam.length)
-                strategies.push({ label: 'domains-only', domains: domainsParam })
-              if (domainsParam.length && q)
-                strategies.push({ label: 'domains+q', domains: domainsParam, q })
+              if (targetDomains.length)
+                strategies.push({ label: 'domains-only', domains: targetDomains })
+              if (targetDomains.length && q)
+                strategies.push({ label: 'domains+q', domains: targetDomains, q })
               if (slug) strategies.push({ label: 'sources(slug)', sources: [slug] })
               if (nameSlug && nameSlug !== slug)
                 strategies.push({ label: 'sources(name)', sources: [nameSlug] })
@@ -241,7 +246,7 @@ export default async function handler(req: any, res: any) {
     if (result.attemptsDetail)
       res.setHeader('X-Provider-Attempts-Detail', result.attemptsDetail.join(','))
     res.setHeader('X-Provider-Articles', String(result.items.length))
-    if (domainsParam.length) res.setHeader('X-Source-Domains', domainsParam.join(','))
+    if (targetDomains.length) res.setHeader('X-Source-Domains', targetDomains.join(','))
     cache(res, 300, 60)
     if (String(req.query.debug) === '1') {
       return res.status(200).json({
@@ -252,7 +257,7 @@ export default async function handler(req: any, res: any) {
           q,
           country,
           slug,
-          domains: domainsParam,
+          domains: targetDomains,
         },
       })
     }

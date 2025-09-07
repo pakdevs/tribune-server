@@ -2,6 +2,7 @@ import { normalize } from '../../_normalize.js'
 import { cors, cache } from '../../_shared.js'
 import { makeKey, getFresh, getStale, setCache } from '../../_cache.js'
 import { getProvidersForPK, buildProviderRequest } from '../../_providers.js'
+import { getSourceDomains } from '../../_sourceDomains.js'
 import { getInFlight, setInFlight } from '../../_inflight.js'
 
 const slugify = (s = '') =>
@@ -34,14 +35,8 @@ export default async function handler(req: any, res: any) {
 
   let q = name ? `"${name}"` : slug
 
-  // Map of known source slugs to domains (extend as needed)
-  const SOURCE_DOMAIN_MAP: Record<string, string[]> = {
-    dawn: ['dawn.com'],
-    'geo-news': ['geo.tv'],
-    'express-tribune': ['tribune.com.pk'],
-    'the-news': ['thenews.com.pk'],
-  }
-  const mappedDomains = SOURCE_DOMAIN_MAP[slug] || []
+  // Resolve domains: prefer explicit query; otherwise map from known sources
+  const mappedDomains = getSourceDomains('pk', slug, name)
   const targetDomains = domainsParam.length ? domainsParam : mappedDomains
 
   try {
