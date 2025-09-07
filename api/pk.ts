@@ -48,7 +48,8 @@ export default async function handler(req: any, res: any) {
     }
     // Miss path: attempt providers with in-flight dedupe
     res.setHeader('X-Cache', 'MISS')
-    const providers = getProvidersForPK()
+    // Home top headlines must use NewsData only (no Webz fallback)
+    const providers = getProvidersForPK().filter((p) => p.type === 'newsdata')
     const flightKey = `pk:${country}:${String(pageNum)}:${String(pageSizeNum)}:d:${domains.join(
       ','
     )}:s:${sources.join(',')}:q:${q}`

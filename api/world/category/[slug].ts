@@ -55,7 +55,8 @@ export default async function handler(req: any, res: any) {
       }
     }
     res.setHeader('X-Cache', 'MISS')
-    const providers = getProvidersForWorld()
+    // For Home categories, use NewsData only
+    const providers = getProvidersForWorld().filter((p) => p.type === 'newsdata')
     const result = await tryProvidersSequential(
       providers,
       'top',
