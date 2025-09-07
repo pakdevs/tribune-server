@@ -64,7 +64,27 @@ export default async function handler(req: any, res: any) {
       )
     }
     const result = await flight
-    const normalized = result.items.map(normalize).filter(Boolean)
+    let normalized = result.items.map(normalize).filter(Boolean)
+    // Enforce domain allowlist if caller requested specific domains
+    if (domains.length) {
+      const allowed = new Set(
+        domains.map((d) =>
+          String(d)
+            .toLowerCase()
+            .replace(/^www\./, '')
+        )
+      )
+      const before = normalized.length
+      normalized = normalized.filter((n) => {
+        const host = String(n.sourceDomain || '')
+          .toLowerCase()
+          .replace(/^www\./, '')
+        return allowed.has(host)
+      })
+      res.setHeader('X-Filter-Domains-Applied', '1')
+      res.setHeader('X-Articles-PreFilter', String(before))
+      res.setHeader('X-Articles-PostFilter', String(normalized.length))
+    }
     res.setHeader('X-Provider', result.provider)
     res.setHeader('X-Provider-Attempts', result.attempts?.join(',') || result.provider)
     if (result.attemptsDetail)
