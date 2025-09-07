@@ -47,6 +47,7 @@ export default async function handler(req: any, res: any) {
       page,
       pageSize,
       'd:' + domains.join(','),
+      's:' + sources.join(','),
     ])
     const noCache = String(req.query.nocache || '0') === '1'
     if (!noCache) {

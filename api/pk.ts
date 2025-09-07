@@ -8,11 +8,29 @@ import { getInFlight, setInFlight } from './_inflight.js'
 export default async function handler(req: any, res: any) {
   cors(res)
   if (req.method === 'OPTIONS') return res.status(204).end()
+  // Minimal rate limiting: 60 req / 60s per IP
+  try {
+    const ip = String(
+      req.headers['x-forwarded-for'] || req.headers['x-real-ip'] || req.socket?.remoteAddress || ''
+    )
+    const key = `rl:pk:${ip}`
+    const now = Date.now()
+    ;(globalThis as any).__rl = (globalThis as any).__rl || new Map<string, number[]>()
+    const rl: Map<string, number[]> = (globalThis as any).__rl
+    const arr = (rl.get(key) || []).filter((t) => now - t < 60_000)
+    if (arr.length >= 60) {
+      res.setHeader('Retry-After', '30')
+      return res.status(429).json({ error: 'Too Many Requests' })
+    }
+    arr.push(now)
+    rl.set(key, arr)
+  } catch {}
   const rawPage = String(req.query.page || '1')
   const pageNum = Math.max(1, parseInt(rawPage, 10) || 1)
   // Enforce fixed page size of 10 per request
   const pageSizeNum = 10
   const country = 'pk'
+  const pageToken = req.query.pageToken ? String(req.query.pageToken) : undefined
   // Optional filters: domains (domain= in NewsData), sources (source_id), q
   const domains = String(req.query.domains || '')
     .split(',')
@@ -30,7 +48,9 @@ export default async function handler(req: any, res: any) {
       country,
       String(pageNum),
       String(pageSizeNum),
+      pageToken ? 'pt:' + pageToken : '',
       'd:' + domains.join(','),
+      's:' + sources.join(','),
     ])
     const noCache = String(req.query.nocache || '0') === '1'
     if (!noCache) {
@@ -50,9 +70,9 @@ export default async function handler(req: any, res: any) {
     res.setHeader('X-Cache', 'MISS')
     // Home top headlines must use NewsData only (no Webz fallback)
     const providers = getProvidersForPK().filter((p) => p.type === 'newsdata')
-    const flightKey = `pk:${country}:${String(pageNum)}:${String(pageSizeNum)}:d:${domains.join(
-      ','
-    )}:s:${sources.join(',')}:q:${q}`
+    const flightKey = `pk:${country}:${String(pageNum)}:${String(pageSizeNum)}:pt:${
+      pageToken || ''
+    }:d:${domains.join(',')}:s:${sources.join(',')}:q:${q}`
     let flight = getInFlight(flightKey)
     if (!flight) {
       flight = setInFlight(
@@ -60,7 +80,7 @@ export default async function handler(req: any, res: any) {
         tryProvidersSequential(
           providers,
           'top',
-          { page: pageNum, pageSize: pageSizeNum, country, domains, sources, q },
+          { page: pageNum, pageSize: pageSizeNum, country, domains, sources, q, pageToken },
           (url, headers) => upstreamJson(url, headers)
         )
       )

@@ -7,6 +7,23 @@ import { getInFlight, setInFlight } from './_inflight.js'
 export default async function handler(req: any, res: any) {
   cors(res)
   if (req.method === 'OPTIONS') return res.status(204).end()
+  // Minimal rate limiting: 30 req / 60s per IP
+  try {
+    const ip = String(
+      req.headers['x-forwarded-for'] || req.headers['x-real-ip'] || req.socket?.remoteAddress || ''
+    )
+    const key = `rl:search:${ip}`
+    const now = Date.now()
+    ;(globalThis as any).__rl = (globalThis as any).__rl || new Map<string, number[]>()
+    const rl: Map<string, number[]> = (globalThis as any).__rl
+    const arr = (rl.get(key) || []).filter((t) => now - t < 60_000)
+    if (arr.length >= 30) {
+      res.setHeader('Retry-After', '30')
+      return res.status(429).json({ error: 'Too Many Requests' })
+    }
+    arr.push(now)
+    rl.set(key, arr)
+  } catch {}
   const q = String(req.query.q || '').trim()
   if (!q) return res.status(200).json({ items: [] })
   if (q.length < 2 || q.length > 128) {

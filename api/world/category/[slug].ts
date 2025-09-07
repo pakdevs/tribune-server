@@ -31,6 +31,15 @@ export default async function handler(req: any, res: any) {
   const pageNum = Math.max(1, parseInt(rawPage, 10) || 1)
   const pageSizeNum = Math.min(100, Math.max(1, parseInt(rawPageSize, 10) || 50))
   const country = String(req.query.country || 'us')
+  // Optional filters: domains, sources
+  const domains = String(req.query.domains || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  const sources = String(req.query.sources || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
   try {
     const cacheKey = makeKey([
       'world',
@@ -39,6 +48,8 @@ export default async function handler(req: any, res: any) {
       country,
       String(pageNum),
       String(pageSizeNum),
+      'd:' + domains.join(','),
+      's:' + sources.join(','),
     ])
     const noCache = String(req.query.nocache || '0') === '1'
     if (!noCache) {
@@ -60,7 +71,7 @@ export default async function handler(req: any, res: any) {
     const result = await tryProvidersSequential(
       providers,
       'top',
-      { page: pageNum, pageSize: pageSizeNum, country, category },
+      { page: pageNum, pageSize: pageSizeNum, country, category, domains, sources },
       (url, headers) => upstreamJson(url, headers)
     )
     const normalized = result.items.map(normalize).filter(Boolean)
@@ -68,6 +79,8 @@ export default async function handler(req: any, res: any) {
     res.setHeader('X-Provider-Attempts', result.attempts?.join(',') || result.provider)
     if (result.attemptsDetail)
       res.setHeader('X-Provider-Attempts-Detail', result.attemptsDetail.join(','))
+    if (domains.length) res.setHeader('X-World-Domains', domains.join(','))
+    if (sources.length) res.setHeader('X-World-Sources', sources.join(','))
     res.setHeader('X-Provider-Articles', String(normalized.length))
     setCache(cacheKey, {
       items: normalized,
