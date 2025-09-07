@@ -15,12 +15,15 @@ export default async function handler(req: any, res: any) {
   if (req.method === 'OPTIONS') return res.status(204).end()
   const slug = slugify(req.query.slug || '')
   const name = String(req.query.name || '').trim()
-  // domain parameter is ignored to avoid NewsData plan restrictions
-  const domain = ''
+  // Accept domain(s) query; fallback to mapped domains by slug
+  const domainsParam = String(req.query.domain || req.query.domains || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean) as string[]
   const rawPage = String(req.query.page || '1')
-  const rawPageSize = String(req.query.pageSize || req.query.limit || '20')
   const pageNum = Math.max(1, parseInt(rawPage, 10) || 1)
-  const pageSizeNum = Math.min(100, Math.max(1, parseInt(rawPageSize, 10) || 50))
+  // Fixed page size of 10
+  const pageSizeNum = 10
   const from = req.query.from ? String(req.query.from) : undefined
   const to = req.query.to ? String(req.query.to) : undefined
   let country = 'pk'
@@ -31,13 +34,23 @@ export default async function handler(req: any, res: any) {
 
   let q = name ? `"${name}"` : slug
 
+  // Map of known source slugs to domains (extend as needed)
+  const SOURCE_DOMAIN_MAP: Record<string, string[]> = {
+    dawn: ['dawn.com'],
+    'geo-news': ['geo.tv'],
+    'express-tribune': ['tribune.com.pk'],
+    'the-news': ['thenews.com.pk'],
+  }
+  const mappedDomains = SOURCE_DOMAIN_MAP[slug] || []
+  const targetDomains = domainsParam.length ? domainsParam : mappedDomains
+
   try {
     const cacheKey = makeKey([
       'source',
       'pk',
       slug,
       name,
-      domain || '',
+      targetDomains.join(',') || '',
       country,
       String(pageNum),
       String(pageSizeNum),
@@ -60,8 +73,14 @@ export default async function handler(req: any, res: any) {
     }
 
     res.setHeader('X-Cache', 'MISS')
-    const providers = getProvidersForPK()
-    const flightKey = `source:pk:${slug}:${name}:${domain || ''}:${country}:${String(
+    let providers = getProvidersForPK()
+    // Prefer Webz when domains present
+    if (targetDomains.length) {
+      providers = [...providers].sort((a, b) =>
+        a.type === 'webz' ? -1 : b.type === 'webz' ? 1 : 0
+      )
+    }
+    const flightKey = `source:pk:${slug}:${name}:${targetDomains.join(',')}:${country}:${String(
       pageNum
     )}:${String(pageSizeNum)}:${from || ''}:${to || ''}`
     let flight = getInFlight(flightKey)
@@ -74,7 +93,9 @@ export default async function handler(req: any, res: any) {
           const attemptsDetail: string[] = []
           const targetSlug = slug
           const nameLower = name.toLowerCase()
-          const domainLower = ''
+          const allowedDomains = new Set(
+            targetDomains.map((d) => d.toLowerCase().replace(/^www\./, ''))
+          )
           for (const p of ordered) {
             attempts.push(p.type)
             try {
@@ -86,6 +107,11 @@ export default async function handler(req: any, res: any) {
                 sources?: string[]
               }> = []
               const nameSlug = nameLower ? slugify(nameLower) : ''
+              // Prefer domain-backed strategies first
+              if (targetDomains.length)
+                strategies.push({ label: 'domains-only', domains: targetDomains })
+              if (targetDomains.length && q)
+                strategies.push({ label: 'domains+q', domains: targetDomains, q })
               if (slug) strategies.push({ label: 'sources(slug)', sources: [slug] })
               if (nameSlug && nameSlug !== slug)
                 strategies.push({ label: 'sources(name)', sources: [nameSlug] })
@@ -117,7 +143,7 @@ export default async function handler(req: any, res: any) {
                       pageSize: pageSizeNum,
                       country: sub._noCountry ? undefined : country,
                       q: s.q,
-                      domains: [],
+                      domains: s.domains || [],
                       sources: s.sources || [],
                       from,
                       to,
@@ -156,13 +182,25 @@ export default async function handler(req: any, res: any) {
                       continue
                     }
                     const normalized = items.map(normalize).filter(Boolean)
-                    const filtered = normalized.filter((a: any) => {
-                      const aName = String(a?.displaySourceName || a?.sourceName || '').trim()
-                      const aSlug = slugify(aName)
-                      const slugMatch = targetSlug && aSlug ? aSlug === targetSlug : false
-                      const nameMatch = nameLower ? aName.toLowerCase().includes(nameLower) : false
-                      return slugMatch || nameMatch
-                    })
+                    let filtered = normalized
+                    if (allowedDomains.size) {
+                      filtered = normalized.filter((a: any) => {
+                        const host = String(a?.sourceDomain || '')
+                          .toLowerCase()
+                          .replace(/^www\./, '')
+                        return allowedDomains.has(host)
+                      })
+                    } else {
+                      filtered = normalized.filter((a: any) => {
+                        const aName = String(a?.displaySourceName || a?.sourceName || '').trim()
+                        const aSlug = slugify(aName)
+                        const slugMatch = targetSlug && aSlug ? aSlug === targetSlug : false
+                        const nameMatch = nameLower
+                          ? aName.toLowerCase().includes(nameLower)
+                          : false
+                        return slugMatch || nameMatch
+                      })
+                    }
                     if (filtered.length) {
                       attemptsDetail.push(`${p.type}:${sub.label}(ok:${filtered.length})`)
                       best = { items: filtered }
@@ -212,6 +250,7 @@ export default async function handler(req: any, res: any) {
     if (result.attemptsDetail)
       res.setHeader('X-Provider-Attempts-Detail', result.attemptsDetail.join(','))
     res.setHeader('X-Provider-Articles', String(result.items.length))
+    if (targetDomains.length) res.setHeader('X-Source-Domains', targetDomains.join(','))
     cache(res, 300, 60)
     if (String(req.query.debug) === '1') {
       return res.status(200).json({
@@ -224,7 +263,7 @@ export default async function handler(req: any, res: any) {
           slug,
           from,
           to,
-          domain,
+          domains: targetDomains,
         },
       })
     }

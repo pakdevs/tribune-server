@@ -15,12 +15,15 @@ export default async function handler(req: any, res: any) {
   if (req.method === 'OPTIONS') return res.status(204).end()
   const slug = slugify(req.query.slug || '')
   const name = String(req.query.name || '').trim()
-  // domain parameter is ignored to avoid NewsData plan restrictions
-  const domain = ''
+  // Accept domain(s) for strict source filtering
+  const domainsParam = String(req.query.domain || req.query.domains || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean) as string[]
   const rawPage = String(req.query.page || '1')
-  const rawPageSize = String(req.query.pageSize || req.query.limit || '20')
   const pageNum = Math.max(1, parseInt(rawPage, 10) || 1)
-  const pageSizeNum = Math.min(100, Math.max(1, parseInt(rawPageSize, 10) || 50))
+  // Fixed page size of 10
+  const pageSizeNum = 10
   const from = req.query.from ? String(req.query.from) : undefined
   const to = req.query.to ? String(req.query.to) : undefined
   let country = String(req.query.country || 'us').toLowerCase()
@@ -38,7 +41,7 @@ export default async function handler(req: any, res: any) {
       'world',
       slug,
       name,
-      domain || '',
+      domainsParam.join(',') || '',
       country,
       String(pageNum),
       String(pageSizeNum),
@@ -61,8 +64,13 @@ export default async function handler(req: any, res: any) {
     }
 
     res.setHeader('X-Cache', 'MISS')
-    const providers = getProvidersForWorld()
-    const flightKey = `source:world:${slug}:${name}:${domain || ''}:${country}:${String(
+    let providers = getProvidersForWorld()
+    if (domainsParam.length) {
+      providers = [...providers].sort((a, b) =>
+        a.type === 'webz' ? -1 : b.type === 'webz' ? 1 : 0
+      )
+    }
+    const flightKey = `source:world:${slug}:${name}:${domainsParam.join(',')}:${country}:${String(
       pageNum
     )}:${String(pageSizeNum)}:${from || ''}:${to || ''}`
     let flight = getInFlight(flightKey)
@@ -75,7 +83,9 @@ export default async function handler(req: any, res: any) {
           const attemptsDetail: string[] = []
           const targetSlug = slug
           const nameLower = name.toLowerCase()
-          const domainLower = ''
+          const allowedDomains = new Set(
+            domainsParam.map((d) => d.toLowerCase().replace(/^www\./, ''))
+          )
           for (const p of ordered) {
             attempts.push(p.type)
             try {
@@ -87,6 +97,10 @@ export default async function handler(req: any, res: any) {
                 sources?: string[]
               }> = []
               const nameSlug = nameLower ? slugify(nameLower) : ''
+              if (domainsParam.length)
+                strategies.push({ label: 'domains-only', domains: domainsParam })
+              if (domainsParam.length && q)
+                strategies.push({ label: 'domains+q', domains: domainsParam, q })
               if (slug) strategies.push({ label: 'sources(slug)', sources: [slug] })
               if (nameSlug && nameSlug !== slug)
                 strategies.push({ label: 'sources(name)', sources: [nameSlug] })
@@ -120,7 +134,7 @@ export default async function handler(req: any, res: any) {
                       pageSize: pageSizeNum,
                       country: sub._noCountry ? undefined : country,
                       q: s.q,
-                      domains: [],
+                      domains: s.domains || [],
                       sources: s.sources || [],
                       from,
                       to,
@@ -159,13 +173,25 @@ export default async function handler(req: any, res: any) {
                       continue
                     }
                     const normalized = items.map(normalize).filter(Boolean)
-                    const filtered = normalized.filter((a: any) => {
-                      const aName = String(a?.displaySourceName || a?.sourceName || '').trim()
-                      const aSlug = slugify(aName)
-                      const slugMatch = targetSlug && aSlug ? aSlug === targetSlug : false
-                      const nameMatch = nameLower ? aName.toLowerCase().includes(nameLower) : false
-                      return slugMatch || nameMatch
-                    })
+                    let filtered = normalized
+                    if (allowedDomains.size) {
+                      filtered = normalized.filter((a: any) => {
+                        const host = String(a?.sourceDomain || '')
+                          .toLowerCase()
+                          .replace(/^www\./, '')
+                        return allowedDomains.has(host)
+                      })
+                    } else {
+                      filtered = normalized.filter((a: any) => {
+                        const aName = String(a?.displaySourceName || a?.sourceName || '').trim()
+                        const aSlug = slugify(aName)
+                        const slugMatch = targetSlug && aSlug ? aSlug === targetSlug : false
+                        const nameMatch = nameLower
+                          ? aName.toLowerCase().includes(nameLower)
+                          : false
+                        return slugMatch || nameMatch
+                      })
+                    }
                     if (filtered.length) {
                       attemptsDetail.push(`${p.type}:${sub.label}(ok:${filtered.length})`)
                       best = { items: filtered }
@@ -215,6 +241,7 @@ export default async function handler(req: any, res: any) {
     if (result.attemptsDetail)
       res.setHeader('X-Provider-Attempts-Detail', result.attemptsDetail.join(','))
     res.setHeader('X-Provider-Articles', String(result.items.length))
+    if (domainsParam.length) res.setHeader('X-Source-Domains', domainsParam.join(','))
     cache(res, 300, 60)
     if (String(req.query.debug) === '1') {
       return res.status(200).json({
@@ -225,7 +252,7 @@ export default async function handler(req: any, res: any) {
           q,
           country,
           slug,
-          domain,
+          domains: domainsParam,
         },
       })
     }
