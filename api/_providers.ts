@@ -1,6 +1,6 @@
 import { recordSuccess, recordError, recordEmpty } from './_stats.js'
 import { isCoolingDown, setCooldown } from './_cooldown.js'
-import { getNewsDataApiKey } from './_env.js'
+import { getNewsDataApiKey, getWebzApiKey } from './_env.js'
 
 const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n))
 
@@ -9,6 +9,8 @@ export function getProvidersForPK() {
   // NewsData.io supports country and sources directly
   const key = getNewsDataApiKey()
   if (key) list.push({ type: 'newsdata', key })
+  const webz = getWebzApiKey()
+  if (webz) list.push({ type: 'webz', key: webz })
   return list
 }
 
@@ -16,6 +18,8 @@ export function getProvidersForWorld() {
   const list: Array<{ type: string; key: string }> = []
   const key = getNewsDataApiKey()
   if (key) list.push({ type: 'newsdata', key })
+  const webz = getWebzApiKey()
+  if (webz) list.push({ type: 'webz', key: webz })
   return list
 }
 
@@ -72,6 +76,52 @@ export function buildProviderRequest(p: any, intent: 'top' | 'search', opts: any
     return { url, headers: {}, pick: (data: any) => data?.results || data?.articles || [] }
   }
 
+  if (p.type === 'webz') {
+    // Webz.io Open Web News API v3
+    // Docs: https://docs.webz.io/reference/news-api
+    // Endpoint sample: https://api.webz.io/newsApi/v3/search?token=...&q=...&language=urdu&countries=pk
+    const params = new URLSearchParams()
+    params.set('token', p.key)
+    // Query: combine q + sites filter when domains provided
+    let query = q ? String(q) : ''
+    if (domains.length) {
+      const siteExpr = domains.map((d: string) => `site:${d}`).join(' OR ')
+      query = query ? `${query} AND (${siteExpr})` : `(${siteExpr})`
+    }
+    if (sources.length) {
+      const siteExpr = sources.map((s: string) => `site:${s}`).join(' OR ')
+      query = query ? `${query} AND (${siteExpr})` : `(${siteExpr})`
+    }
+    // Nudge to news-only to improve quality unless the query already specifies site_type
+    if (!/\bsite_type:\w+/i.test(query)) {
+      query = query ? `${query} AND site_type:news` : 'site_type:news'
+    }
+    if (query) params.set('q', query)
+    // Language mapping: use two-letter ISO or names like 'urdu'
+    if (opts.language) {
+      params.set('language', String(opts.language))
+    }
+    // Country filter
+    if (country) params.set('countries', country)
+    // Category: Webz supports "category" (IAB-ish). Pass as provided except 'general'
+    if (category && category !== 'all' && category !== 'general') params.set('category', category)
+    // Sort & pagination
+    const size = Math.min(100, Math.max(1, pageSize))
+    params.set('size', String(size))
+    const from = (page - 1) * size
+    if (from > 0) params.set('from', String(from))
+    // Time range (optional)
+    if (opts.from) params.set('fromPublishedDate', String(opts.from))
+    if (opts.to) params.set('toPublishedDate', String(opts.to))
+    const url = `https://api.webz.io/newsApi/v3/search?${params.toString()}`
+    // Picker: Webz v3 returns { totalResults, posts: [...] }
+    return {
+      url,
+      headers: {},
+      pick: (data: any) => data?.posts || data?.articles || data?.results || [],
+    }
+  }
+
   // Only NewsData provider supported
   return null
 }
@@ -94,8 +144,15 @@ export async function tryProvidersSequential(
     err.hint = hint
     throw err
   }
-  // Use providers as supplied by getProviders* (no special-casing GNews)
+  // Use providers as supplied by getProviders* (but prefer Webz when source filters are present)
   let ordered = providers
+  try {
+    const hasDomains = Array.isArray(opts?.domains) && opts.domains.length > 0
+    const hasSources = Array.isArray(opts?.sources) && opts.sources.length > 0
+    if (hasDomains || hasSources) {
+      ordered = [...providers].sort((a, b) => (a.type === 'webz' ? -1 : b.type === 'webz' ? 1 : 0))
+    }
+  } catch {}
   for (let i = 0; i < ordered.length; i++) {
     const p = ordered[i]
     attempts.push(p.type)
@@ -118,6 +175,12 @@ export async function tryProvidersSequential(
           label: 'minimal',
           o: { page: opts.page, pageSize: opts.pageSize, country: opts.country },
         })
+      } else if (p.type === 'webz') {
+        variants.push({ label: 'as-is', o: { ...opts } })
+        variants.push({ label: 'no-category', o: { ...opts, category: undefined } })
+        variants.push({ label: 'no-domains-sources', o: { ...opts, domains: [], sources: [] } })
+        variants.push({ label: 'no-q', o: { ...opts, q: undefined } })
+        variants.push({ label: 'no-country', o: { ...opts, country: undefined } })
       } else {
         variants.push({ label: 'as-is', o: { ...opts } })
       }

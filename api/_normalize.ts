@@ -28,7 +28,7 @@ export type NormalizedArticle = {
 export const normalize = (raw: RawArticle | null | undefined): NormalizedArticle | null => {
   if (!raw || typeof raw !== 'object') return null
   const id = String(
-    raw.id ||
+    (raw as any).id ||
       (raw as any)._id ||
       (raw as any).guid ||
       (raw as any).url ||
@@ -40,13 +40,15 @@ export const normalize = (raw: RawArticle | null | undefined): NormalizedArticle
   const title = String((raw as any).title || (raw as any).heading || 'Untitled')
   const summary = String(
     (raw as any).summary ||
+      (raw as any).highlightText ||
+      (raw as any).highlightTitle ||
       (raw as any).description ||
       (raw as any).excerpt ||
       (raw as any).contentSnippet ||
       ''
   )
   const content = String(
-    (raw as any).content || (raw as any).fullContent || (raw as any).body || ''
+    (raw as any).content || (raw as any).fullContent || (raw as any).body || (raw as any).text || ''
   )
   const author = String(
     (raw as any).author || (raw as any).creator || (raw as any).byline || 'Unknown'
@@ -62,6 +64,7 @@ export const normalize = (raw: RawArticle | null | undefined): NormalizedArticle
       (raw as any).urlToImage ||
       (raw as any).image_url ||
       (raw as any).image ||
+      (raw as any).main_image ||
       (raw as any).thumbnail ||
       (raw as any).enclosure?.url ||
       ''
@@ -75,12 +78,19 @@ export const normalize = (raw: RawArticle | null | undefined): NormalizedArticle
     (raw as any).source ||
     (raw as any).publisher ||
     (raw as any).site ||
+    (raw as any).site_full ||
     (raw as any).domain ||
     (raw as any).rights ||
     (raw as any).newsSite ||
     ''
 
-  const sourceUrl = String((raw as any).sourceUrl || (raw as any).link || (raw as any).url || '')
+  const sourceUrl = String(
+    (raw as any).sourceUrl ||
+      (raw as any).link ||
+      (raw as any).url ||
+      (raw as any).thread?.url ||
+      ''
+  )
   let sourceDomain = ''
   if (sourceUrl) {
     try {

@@ -1,0 +1,60 @@
+Provider recommendations and notes (Sept 6, 2025)
+
+App-tailored pick
+- Primary: Event Registry (aka NewsAPI.ai)
+	- Strong source/country controls, entities/dedup, multilingual (Urdu+English), solid PK coverage.
+- Fallback: Bing News Search (Azure)
+	- Reliable mainstream coverage, simple filters, good for quota fallback.
+- Budget alt: Newscatcher + Bing
+	- Decent freshness/filters; control quality with a Pakistan domain allowlist.
+- Broad crawl option: Webz.io
+	- Pros: news+blogs+forums, rich Lucene queries, large archive. Cons: pricier, crawl-based licensing, needs strict whitelists/dedupe.
+- Research/trends supplement: GDELT (not primary feed)
+	- Massive global signal; useful for trend alerts and geo/event analysis; noisy for article lists.
+
+Filtering constraints (quick refs)
+- GNews (gnews.io): country=yes; source filter=no (approximate via q=site:domain.com OR ...).
+- NewsAPI.org: sources=yes (IDs), domains/excludeDomains; country only on top-headlines; cannot combine sources with country/category on top-headlines; /everything has no country.
+
+NewsAPI.ai relation
+- NewsAPI.ai is operated by Event Registry (same backend/corpus/ML). Not related to NewsAPI.org.
+
+Feature highlights across providers (beyond basics)
+- Coverage/archive: depth from months to multi-year backfills (Event Registry, Webz.io, enterprise vendors).
+- Query/filtering: boolean/Lucene, field filters, domain whitelists/blacklists, region/country, categories.
+- Enrichment: entities, topics/taxonomy, sentiment, summarization, dedup/clustering, geo extraction.
+- Delivery: REST, streaming/firehose, webhooks; bulk export on higher tiers.
+- Analytics: trends/time series, event detection, related stories.
+- Compliance: snippet vs full-text rights, caching/retention rules vary by vendor.
+
+Pakistan-focused allowlist (starter set)
+- dawn.com, thenews.com.pk, tribune.com.pk, geo.tv, arynews.tv, samaa.tv,
+	brecorder.com, nation.com.pk, pakistantoday.com.pk, dailytimes.com.pk, 92news.pk.
+
+Practical integration steps (server)
+- Providers: implement Event Registry (primary) and Bing (fallback) in tribune-server/api/_providers.ts
+	and map fields in tribune-server/api/_normalize.ts.
+- Env keys: EVENT_REGISTRY_API_KEY, BING_NEWS_KEY, (optional) WEBZ_API_KEY.
+- Feature flag: select provider chain in tribune-server/api/_env.ts (e.g., PROVIDER=event-registry|bing|webzio).
+- Normalization: map to { title, description, url, image, source, publishedAt, language } and
+	dedupe by hostname+title; apply language filter (en, ur) and domain allowlist for PK sources.
+
+Notes
+- If strict source+country control is required, prefer Event Registry or Webz.io (with domain filters).
+- For cost-sensitive start, Newscatcher (+ Bing fallback) is viable; upgrade to Event Registry as traffic grows.
+
+AI summaries, sentiment, and translation (Webz.io vs Event Registry)
+- Webz.io
+	- Sentiment: yes (article-level).
+	- Enrichment: entities, categories/taxonomy, fake-news/satire and political-slant tags, dedupe, readability/full-text extraction.
+	- Summaries: no standard summary field by default; highlights/snippets available. Some enterprise add-ons may offer summaries (sales-enabled).
+	- Translation: returns original language (no auto-translate to Urdu/English).
+- Event Registry (NewsAPI.ai)
+	- Sentiment: yes (article/story-level).
+	- Enrichment: concepts/entities, categories, cross-lingual story clustering, related articles, dedupe.
+	- Summaries: short machine summaries available on some endpoints/plans (not guaranteed on all tiers).
+	- Translation: generally not; focuses on cross-lingual linking rather than delivering translated text.
+
+Recommended app approach
+- Prefer native Urdu sources for Urdu readers (lang=ur + PK allowlist).
+- For English-only items when user language is Urdu: perform server-side translation and/or summarization; label as "AI-generated" and cache per (url,targetLang).
