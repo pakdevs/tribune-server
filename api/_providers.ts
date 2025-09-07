@@ -1,6 +1,6 @@
 import { recordSuccess, recordError, recordEmpty } from './_stats.js'
 import { isCoolingDown, setCooldown } from './_cooldown.js'
-import { getNewsDataApiKey, getWebzApiKey } from './_env.js'
+import { getNewsDataApiKey, getWebzApiKey, getWebzUseLite } from './_env.js'
 
 const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n))
 
@@ -77,12 +77,9 @@ export function buildProviderRequest(p: any, intent: 'top' | 'search', opts: any
   }
 
   if (p.type === 'webz') {
-    // Webz.io Open Web News API v3
-    // Docs: https://docs.webz.io/reference/news-api
-    // Endpoint sample: https://api.webz.io/newsApi/v3/search?token=...&q=...&language=urdu&countries=pk
+    const useLite = getWebzUseLite()
     const params = new URLSearchParams()
     params.set('token', p.key)
-    // Query: combine q + sites filter when domains provided
     let query = q ? String(q) : ''
     if (domains.length) {
       const siteExpr = domains.map((d: string) => `site:${d}`).join(' OR ')
@@ -92,34 +89,33 @@ export function buildProviderRequest(p: any, intent: 'top' | 'search', opts: any
       const siteExpr = sources.map((s: string) => `site:${s}`).join(' OR ')
       query = query ? `${query} AND (${siteExpr})` : `(${siteExpr})`
     }
-    // Nudge to news-only to improve quality unless the query already specifies site_type
     if (!/\bsite_type:\w+/i.test(query)) {
       query = query ? `${query} AND site_type:news` : 'site_type:news'
     }
     if (query) params.set('q', query)
-    // Language mapping: use two-letter ISO or names like 'urdu'
-    if (opts.language) {
-      params.set('language', String(opts.language))
+
+    let url: string
+    let pick: (d: any) => any[]
+    if (useLite) {
+      // Lite endpoint: https://api.webz.io/newsApiLite
+      // Returns up to 10 results and provides a next URL for pagination
+      url = `https://api.webz.io/newsApiLite?${params.toString()}`
+      pick = (d: any) => d?.posts || d?.articles || d?.results || []
+    } else {
+      // Full v3 endpoint with richer params
+      if (opts.language) params.set('language', String(opts.language))
+      if (country) params.set('countries', country)
+      if (category && category !== 'all' && category !== 'general') params.set('category', category)
+      const size = Math.min(100, Math.max(1, pageSize))
+      params.set('size', String(size))
+      const from = (page - 1) * size
+      if (from > 0) params.set('from', String(from))
+      if (opts.from) params.set('fromPublishedDate', String(opts.from))
+      if (opts.to) params.set('toPublishedDate', String(opts.to))
+      url = `https://api.webz.io/newsApi/v3/search?${params.toString()}`
+      pick = (d: any) => d?.posts || d?.articles || d?.results || []
     }
-    // Country filter
-    if (country) params.set('countries', country)
-    // Category: Webz supports "category" (IAB-ish). Pass as provided except 'general'
-    if (category && category !== 'all' && category !== 'general') params.set('category', category)
-    // Sort & pagination
-    const size = Math.min(100, Math.max(1, pageSize))
-    params.set('size', String(size))
-    const from = (page - 1) * size
-    if (from > 0) params.set('from', String(from))
-    // Time range (optional)
-    if (opts.from) params.set('fromPublishedDate', String(opts.from))
-    if (opts.to) params.set('toPublishedDate', String(opts.to))
-    const url = `https://api.webz.io/newsApi/v3/search?${params.toString()}`
-    // Picker: Webz v3 returns { totalResults, posts: [...] }
-    return {
-      url,
-      headers: {},
-      pick: (data: any) => data?.posts || data?.articles || data?.results || [],
-    }
+    return { url, headers: {}, pick }
   }
 
   // Only NewsData provider supported

@@ -14,3 +14,11 @@ export function getWebzApiKey(): string | undefined {
   const key = (process as any).env.WEBZ_API
   return key ? String(key) : undefined
 }
+
+// Whether to use Webz News API Lite (free tier). Defaults to true if unset.
+export function getWebzUseLite(): boolean {
+  const v = (process as any).env.WEBZ_USE_LITE
+  if (v === undefined) return true
+  const s = String(v).trim().toLowerCase()
+  return s === '1' || s === 'true' || s === 'yes'
+}
