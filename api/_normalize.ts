@@ -53,9 +53,45 @@ export const normalize = (raw: RawArticle | null | undefined): NormalizedArticle
   const author = String(
     (raw as any).author || (raw as any).creator || (raw as any).byline || 'Unknown'
   )
-  const publishDate = String(
-    (raw as any).publishDate || (raw as any).publishedAt || (raw as any).pubDate || ''
+  // Publish date: try multiple common fields (including Webz fields), then fallback to parsing from content
+  let publishDate = String(
+    (raw as any).publishDate ||
+      (raw as any).publishedAt ||
+      (raw as any).pubDate ||
+      (raw as any).published ||
+      (raw as any).date ||
+      (raw as any).createdAt ||
+      (raw as any).created_at ||
+      (raw as any).thread?.published ||
+      ''
   )
+  if (!publishDate) {
+    const text = String(
+      (raw as any).content ||
+        (raw as any).fullContent ||
+        (raw as any).body ||
+        (raw as any).text ||
+        ''
+    )
+    // Try ISO-like first e.g., 2025-09-06 or 2025-09-06T12:34:56Z
+    let m = text.match(
+      /(\d{4}-\d{2}-\d{2})(?:[T\s]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?)?/
+    )
+    if (m) {
+      const d = new Date(m[0])
+      if (!isNaN(d.getTime())) publishDate = d.toISOString()
+    }
+    if (!publishDate) {
+      // Try 'Month DD, YYYY' e.g., September 06, 2025
+      m = text.match(
+        /(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}/i
+      )
+      if (m) {
+        const d = new Date(m[0])
+        if (!isNaN(d.getTime())) publishDate = d.toISOString()
+      }
+    }
+  }
   const category = String(
     (raw as any).category || (raw as any).section || (raw as any).topic || 'general'
   )
