@@ -32,7 +32,8 @@ export function getProvidersForWorld() {
 
 export function buildProviderRequest(p: any, intent: 'top' | 'search', opts: any) {
   const page = clamp(parseInt(String(opts.page || '1'), 10) || 1, 1, 100000)
-  const pageSize = clamp(parseInt(String(opts.pageSize || '50'), 10) || 50, 1, 100)
+  // Enforce fixed page size of 10 regardless of inbound value
+  const pageSize = 10
   const country = String(opts.country || 'us')
   const q: string | undefined = opts.q ? String(opts.q) : undefined
   const domains = Array.isArray(opts.domains)
@@ -50,7 +51,7 @@ export function buildProviderRequest(p: any, intent: 'top' | 'search', opts: any
     : undefined
 
   if (p.type === 'newsdata') {
-    const pageSizeUsed = Math.min(10, pageSize)
+    const pageSizeUsed = 10
     const params = new URLSearchParams({ apikey: p.key, language: 'en' })
     const includePagination = !opts?._noPagination
     const isPublicKey = String(p.key || '').startsWith('pub_')
@@ -113,9 +114,8 @@ export function buildProviderRequest(p: any, intent: 'top' | 'search', opts: any
       if (opts.language) params.set('language', String(opts.language))
       if (country) params.set('countries', country)
       if (category && category !== 'all' && category !== 'general') params.set('category', category)
-      const size = Math.min(100, Math.max(1, pageSize))
-      params.set('size', String(size))
-      const from = (page - 1) * size
+      params.set('size', '10')
+      const from = (page - 1) * 10
       if (from > 0) params.set('from', String(from))
       if (opts.from) params.set('fromPublishedDate', String(opts.from))
       if (opts.to) params.set('toPublishedDate', String(opts.to))

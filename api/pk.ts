@@ -9,9 +9,9 @@ export default async function handler(req: any, res: any) {
   cors(res)
   if (req.method === 'OPTIONS') return res.status(204).end()
   const rawPage = String(req.query.page || '1')
-  const rawPageSize = String(req.query.pageSize || req.query.limit || '10')
   const pageNum = Math.max(1, parseInt(rawPage, 10) || 1)
-  const pageSizeNum = Math.min(100, Math.max(1, parseInt(rawPageSize, 10) || 50))
+  // Enforce fixed page size of 10 per request
+  const pageSizeNum = 10
   const country = 'pk'
   // Optional filters: domains (domain= in NewsData), sources (source_id), q
   const domains = String(req.query.domains || '')
@@ -126,7 +126,7 @@ export default async function handler(req: any, res: any) {
     return res.status(200).json({ items: normalized })
   } catch (e: any) {
     const page = String(req.query.page || '1')
-    const pageSize = String(req.query.pageSize || req.query.limit || '50')
+    const pageSize = '10'
     const country = 'pk'
     const cacheKey = makeKey([
       'pk',
