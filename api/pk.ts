@@ -1,4 +1,5 @@
 import { normalize } from './_normalize.js'
+import { dedupeByTitle } from './_dedupe.js'
 import { cors, cache, upstreamJson } from './_shared.js'
 import { makeKey, getFresh, getStale, setCache } from './_cache.js'
 import { getProvidersForPK, tryProvidersSequential } from './_providers.js'
@@ -30,6 +31,7 @@ export default async function handler(req: any, res: any) {
   // Enforce fixed page size of 10 per request
   const pageSizeNum = 10
   const country = 'pk'
+  const scope = String(req.query.scope || 'from') // 'from' | 'about'
   const pageToken = req.query.pageToken ? String(req.query.pageToken) : undefined
   // Optional filters: domains (domain= in NewsData), sources (source_id), q
   const domains = String(req.query.domains || '')
@@ -46,6 +48,7 @@ export default async function handler(req: any, res: any) {
       'pk',
       'top',
       country,
+      'scope:' + scope,
       String(pageNum),
       String(pageSizeNum),
       pageToken ? 'pt:' + pageToken : '',
@@ -87,6 +90,92 @@ export default async function handler(req: any, res: any) {
     }
     const result = await flight
     let normalized = result.items.map(normalize).filter(Boolean)
+    // Compute/fallback flags if missing
+    function getTld(host = '') {
+      const h = String(host || '').toLowerCase()
+      const parts = h.split('.')
+      return parts.length >= 2 ? parts.slice(-1)[0] : ''
+    }
+    function inferSourceCountryFromDomain(host = ''): string | undefined {
+      const h = String(host || '')
+        .toLowerCase()
+        .replace(/^www\./, '')
+      const tld = getTld(h)
+      if (tld === 'pk') return 'PK'
+      const knownPK = new Set(['brecorder.com', 'thefridaytimes.com'])
+      if (knownPK.has(h)) return 'PK'
+      return undefined
+    }
+    function detectCountriesFromText(title = '', summary = ''): string[] {
+      const text = `${title} ${summary}`.toLowerCase()
+      const hits = new Set<string>()
+      const pkTerms = [
+        'pakistan',
+        'pakistani',
+        'islamabad',
+        'lahore',
+        'karachi',
+        'peshawar',
+        'rawalpindi',
+        'balochistan',
+        'sindh',
+        'punjab',
+        'kpk',
+        'gilgit-baltistan',
+        'azad kashmir',
+        'pak rupee',
+        'pak govt',
+      ]
+      for (const term of pkTerms) {
+        if (text.includes(term)) hits.add('PK')
+      }
+      return Array.from(hits)
+    }
+    function ensureFlags(n: any) {
+      if (typeof n.isFromPK !== 'boolean') {
+        const host = String(n.sourceDomain || '')
+        const country = inferSourceCountryFromDomain(host)
+        n.sourceCountry = country
+        n.isFromPK = country === 'PK'
+      }
+      if (!Array.isArray(n.mentionsCountries) || typeof n.isAboutPK !== 'boolean') {
+        const arr = detectCountriesFromText(n.title || '', n.summary || '')
+        n.mentionsCountries = arr
+        n.isAboutPK = arr.includes('PK')
+      }
+      return n
+    }
+    function rank(items: any[]) {
+      const now = Date.now()
+      const score = (it: any) => {
+        const t = Date.parse(it.publishDate || it.publishedAt || '') || now
+        const recency = 1 / Math.max(1, now - t)
+        const aboutBoost = scope === 'about' && it.isAboutPK && !it.isFromPK ? 1.1 : 1
+        return recency * aboutBoost
+      }
+      return items.slice().sort((a, b) => score(b) - score(a))
+    }
+    function dedupe(items: any[]) {
+      const seen = new Set<string>()
+      return items.filter((it) => {
+        const key = String(it.url || it.link || it.id || '').toLowerCase()
+        if (!key) return true
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+      })
+    }
+    normalized = normalized.map(ensureFlags)
+    if (scope === 'from') normalized = normalized.filter((n: any) => n.isFromPK)
+    else if (scope === 'about') normalized = normalized.filter((n: any) => n.isAboutPK)
+    const preCount = normalized.length
+    normalized = dedupe(rank(normalized))
+    if (String(process.env.FEATURE_TITLE_DEDUPE || '1') === '1') {
+      normalized = dedupeByTitle(normalized, 0.9)
+    }
+    res.setHeader('X-PK-Scope', scope)
+    res.setHeader('X-Articles-PreDedupe', String(preCount))
+    res.setHeader('X-Articles-PostDedupe', String(normalized.length))
     // Enforce domain allowlist if caller requested specific domains
     if (domains.length) {
       const allowed = new Set(

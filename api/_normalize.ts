@@ -23,6 +23,11 @@ export type NormalizedArticle = {
   sourceDomain: string
   sourceIcon: string
   sourceUrl: string
+  // Optional enrichment flags
+  sourceCountry?: string // e.g., 'PK'
+  mentionsCountries?: string[] // e.g., ['PK']
+  isFromPK?: boolean
+  isAboutPK?: boolean
 }
 
 export const normalize = (raw: RawArticle | null | undefined): NormalizedArticle | null => {
@@ -166,6 +171,54 @@ export const normalize = (raw: RawArticle | null | undefined): NormalizedArticle
   const safeImage = imageUrl
   const imageAspectRatio: number | null = null
 
+  // Lightweight country and PK flags
+  function getTld(host = '') {
+    const h = String(host || '').toLowerCase()
+    const parts = h.split('.')
+    return parts.length >= 2 ? parts.slice(-1)[0] : ''
+  }
+  function inferSourceCountryFromDomain(host = ''): string | undefined {
+    const h = String(host || '')
+      .toLowerCase()
+      .replace(/^www\./, '')
+    const tld = getTld(h)
+    if (tld === 'pk') return 'PK'
+    // Known Pakistani domains without .pk (can expand)
+    const knownPK = new Set(['brecorder.com', 'thefridaytimes.com'])
+    if (knownPK.has(h)) return 'PK'
+    return undefined
+  }
+  function detectCountriesFromText(title = '', summary = ''): string[] {
+    const text = `${title} ${summary}`.toLowerCase()
+    const hits = new Set<string>()
+    const pkTerms = [
+      'pakistan',
+      'pakistani',
+      'islamabad',
+      'lahore',
+      'karachi',
+      'peshawar',
+      'rawalpindi',
+      'balochistan',
+      'sindh',
+      'punjab',
+      'kpk',
+      'gilgit-baltistan',
+      'azad kashmir',
+      'pak rupee',
+      'pak govt',
+    ]
+    for (const term of pkTerms) {
+      if (text.includes(term)) hits.add('PK')
+    }
+    return Array.from(hits)
+  }
+
+  const sourceCountry = inferSourceCountryFromDomain(sourceDomain)
+  const mentionsCountries = detectCountriesFromText(title, summary)
+  const isFromPK = sourceCountry === 'PK'
+  const isAboutPK = mentionsCountries.includes('PK')
+
   return {
     id,
     title,
@@ -190,5 +243,9 @@ export const normalize = (raw: RawArticle | null | undefined): NormalizedArticle
     sourceDomain,
     sourceIcon,
     sourceUrl,
+    sourceCountry,
+    mentionsCountries,
+    isFromPK,
+    isAboutPK,
   }
 }
