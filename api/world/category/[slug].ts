@@ -66,8 +66,8 @@ export default async function handler(req: any, res: any) {
       }
     }
     res.setHeader('X-Cache', 'MISS')
-    // For Home categories, use NewsData only
-    const providers = getProvidersForWorld().filter((p) => p.type === 'newsdata')
+    // Use Webz-only providers
+    const providers = getProvidersForWorld()
     const result = await tryProvidersSequential(
       providers,
       'top',

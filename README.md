@@ -6,12 +6,12 @@ Production-focused serverless API aggregator providing normalized news articles 
 
 | Purpose                         | Route                            | Notes                                                                        |
 | ------------------------------- | -------------------------------- | ---------------------------------------------------------------------------- |
-| World mixed headlines           | `GET /api/world`                 | Backed by NewsData.io (country/category filters)                             |
-| Pakistan headlines              | `GET /api/pk`                    | Backed by NewsData.io (country=pk; supports domains and source filters)      |
+| World mixed headlines           | `GET /api/world`                 | Backed by Webz.io (country/category filters)                                 |
+| Pakistan headlines              | `GET /api/pk`                    | Backed by Webz.io (country=pk; supports domain/source filters)               |
 | World category                  | `GET /api/world/category/{slug}` | Slugs: business, entertainment, general, health, science, sports, technology |
 | Pakistan category               | `GET /api/pk/category/{slug}`    | Same slug set; fallback logic applies                                        |
 | US Top (legacy single provider) | `GET /api/top`                   | Deprecated                                                                   |
-| Search (global)                 | `GET /api/search?q=term`         | Backed by NewsData.io (domain/source filters supported)                      |
+| Search (global)                 | `GET /api/search?q=term`         | Backed by Webz.io (domain/source filters supported)                          |
 | Provider stats (ephemeral)      | `GET /api/stats`                 | In-memory counts (resets on cold start)                                      |
 
 All successful responses: `{ items: Article[] }` (empty array if no matches). Errors: `{ error: string, message? }`.
@@ -46,28 +46,28 @@ Examples:
 
 Set only in Vercel (never commit keys):
 
-`NEWSDATA_API`
+`WEBZ_API`
 
 Local development: create a `.env` file in this folder with:
 
 ```
-NEWSDATA_API=your_newsdata_api_key_here
+WEBZ_API=your_webz_api_key_here
 ```
 
 The server loads it automatically via `dotenv` only in local runs.
-The server uses NewsData.io. Keys are never exposed to the client.
+The server uses Webz.io. Keys are never exposed to the client.
 
 ### Pakistan feed filters
 
 PK endpoints use `country=pk` and support optional filters:
 
-- `domains`: comma-separated hostnames (NewsData `domain`)
-- `sources`: comma-separated source IDs (NewsData `source_id`)
+- `domains`: comma-separated hostnames (maps to Webz `site:` in query)
+- `sources`: comma-separated source IDs or hostnames (mapped to `site:`)
 - `q`: keyword(s) to refine results
 
 ## Provider Strategy
 
-- Provider: NewsData.io. Endpoints use `/api/1/news` with `country`, `category`, `q`, and optional `domain` and `source_id` filters.
+- Provider: Webz.io. Endpoints use `newsApiLite` or `newsApi/v3/search` with `q` expressions and optional `countries`, `category`, and `site:` filters.
 
 ## Category & Aliases
 

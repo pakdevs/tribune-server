@@ -1,4 +1,4 @@
-## Server: main architecture (Vercel serverless + NewsData.io)
+## Server: main architecture (Vercel serverless + Webz.io)
 
 High-level layout of the `tribune-server` workspace. Omitted: node_modules, .git.
 
@@ -9,7 +9,7 @@ The-Pakistan-Tribune/tribune-server
 ├─ README.md
 ├─ index.html ← docs with example API links
 ├─ api/ ← serverless API routes
-│ ├─ \_env.ts ← env helpers (uses NEWSDATA_API)
+│ ├─ \_env.ts ← env helpers (uses WEBZ_API)
 │ ├─ \_providers.ts ← provider builder + retry variants
 │ ├─ \_normalize.ts ← normalize upstream items
 │ ├─ \_shared.ts ← common helpers
@@ -44,8 +44,8 @@ The-Pakistan-Tribune/tribune-server
 
 Notes
 
-- Single provider: NewsData.io /api/1/news with NEWSDATA_API.
+- Single provider: Webz.io News API (Lite or v3) with WEBZ_API.
 - Page size capped/defaulted to 10; public keys omit page_size.
-- Source endpoints ignore domain; prefer NewsData source_id when available.
+- Source endpoints prefer domain-based filtering via site: and optional name slug matching.
 - Robust fallback variants handle 422s and plan limits.
   ...

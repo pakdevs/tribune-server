@@ -94,7 +94,7 @@ export default async function handler(req: any, res: any) {
           for (const p of ordered) {
             attempts.push(p.type)
             try {
-              // Build strategy fallbacks: prefer NewsData source_id when possible, then q-only
+              // Build strategy fallbacks for Webz: prefer domain-based search, then source slug/name, then q-only
               const strategies: Array<{
                 label: string
                 q?: string
@@ -114,7 +114,7 @@ export default async function handler(req: any, res: any) {
               if (nameSlug && nameSlug !== slug)
                 strategies.push({ label: 'sources+name(name)', sources: [nameSlug], q })
               strategies.push({ label: 'q-only', q })
-              // Try each strategy with sub-variants to handle NewsData quirks (e.g., public keys pagination)
+              // Try each strategy with sub-variants
               let best: { items: any[] } | null = null
               for (const s of strategies) {
                 const subVariants: Array<{
@@ -163,14 +163,7 @@ export default async function handler(req: any, res: any) {
                         return r.json()
                       })
                       .finally(() => clearTimeout(timeoutId))
-                    // NewsData may return 200 with status:error
-                    if (p.type === 'newsdata') {
-                      const statusField = String((json as any)?.status || '').toLowerCase()
-                      if (statusField && statusField !== 'success') {
-                        attemptsDetail.push(`${p.type}:${sub.label}(status:${statusField})`)
-                        continue
-                      }
-                    }
+                    // No provider-specific body status handling needed
                     const items = reqSpec.pick(json)
                     if (!Array.isArray(items) || !items.length) {
                       attemptsDetail.push(`${p.type}:${sub.label}(empty)`)

@@ -33,7 +33,7 @@ export default async function handler(req: any, res: any) {
   const country = 'pk'
   const scope = String(req.query.scope || 'from') // 'from' | 'about'
   const pageToken = req.query.pageToken ? String(req.query.pageToken) : undefined
-  // Optional filters: domains (domain= in NewsData), sources (source_id), q
+  // Optional filters: domains (site:), sources (treated as site:), q
   const domains = String(req.query.domains || '')
     .split(',')
     .map((s) => s.trim())
@@ -71,8 +71,8 @@ export default async function handler(req: any, res: any) {
     }
     // Miss path: attempt providers with in-flight dedupe
     res.setHeader('X-Cache', 'MISS')
-    // Home top headlines must use NewsData only (no Webz fallback)
-    const providers = getProvidersForPK().filter((p) => p.type === 'newsdata')
+    // Use Webz-only providers
+    const providers = getProvidersForPK()
     const flightKey = `pk:${country}:${String(pageNum)}:${String(pageSizeNum)}:pt:${
       pageToken || ''
     }:d:${domains.join(',')}:s:${sources.join(',')}:q:${q}`

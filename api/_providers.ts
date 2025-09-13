@@ -1,21 +1,12 @@
 import { recordSuccess, recordError, recordEmpty } from './_stats.js'
 import { isCoolingDown, setCooldown } from './_cooldown.js'
-import {
-  getNewsDataApiKey,
-  getWebzApiKey,
-  getWebzUseLite,
-  getWebzDailyLimit,
-  getWebzCallCost,
-} from './_env.js'
+import { getWebzApiKey, getWebzUseLite, getWebzDailyLimit, getWebzCallCost } from './_env.js'
 import { canSpend, spend, getUsedToday } from './_budget.js'
 
 const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n))
 
 export function getProvidersForPK() {
   const list: Array<{ type: string; key: string }> = []
-  // NewsData.io supports country and sources directly
-  const key = getNewsDataApiKey()
-  if (key) list.push({ type: 'newsdata', key })
   const webz = getWebzApiKey()
   if (webz) list.push({ type: 'webz', key: webz })
   return list
@@ -23,8 +14,6 @@ export function getProvidersForPK() {
 
 export function getProvidersForWorld() {
   const list: Array<{ type: string; key: string }> = []
-  const key = getNewsDataApiKey()
-  if (key) list.push({ type: 'newsdata', key })
   const webz = getWebzApiKey()
   if (webz) list.push({ type: 'webz', key: webz })
   return list
@@ -49,40 +38,6 @@ export function buildProviderRequest(p: any, intent: 'top' | 'search', opts: any
   const category: string | undefined = opts.category
     ? String(opts.category).toLowerCase()
     : undefined
-
-  if (p.type === 'newsdata') {
-    const pageSizeUsed = 10
-    const params = new URLSearchParams({ apikey: p.key, language: 'en' })
-    const includePagination = !opts?._noPagination
-    const isPublicKey = String(p.key || '').startsWith('pub_')
-    // NewsData 'page' is a token; avoid sending page=1. Use pageToken when provided; else only send numeric when >1.
-    if (includePagination) {
-      if (opts?.pageToken) {
-        params.set('page', String(opts.pageToken))
-      } else if (page > 1) {
-        params.set('page', String(page))
-      }
-      if (!isPublicKey) {
-        params.set('page_size', String(pageSizeUsed))
-      }
-    }
-    // Filters common to both intents
-    if (country) params.set('country', country)
-    if (q) params.set('q', q)
-    if (domains.length) params.set('domain', domains.join(','))
-    if (sources.length) params.set('source_id', sources.join(','))
-    if (opts.from) params.set('from_date', String(opts.from))
-    if (opts.to) params.set('to_date', String(opts.to))
-
-    // Category: skip 'general' and 'all' for NewsData
-    if (category && category !== 'all' && category !== 'general') {
-      params.set('category', category)
-    }
-
-    const base = 'https://newsdata.io/api/1/news'
-    const url = `${base}?${params.toString()}`
-    return { url, headers: {}, pick: (data: any) => data?.results || data?.articles || [] }
-  }
 
   if (p.type === 'webz') {
     const useLite = getWebzUseLite()
@@ -124,8 +79,7 @@ export function buildProviderRequest(p: any, intent: 'top' | 'search', opts: any
     }
     return { url, headers: {}, pick }
   }
-
-  // Only NewsData provider supported
+  // No other providers supported
   return null
 }
 
@@ -140,12 +94,8 @@ export async function tryProvidersSequential(
   const attemptsDetail: string[] = []
   const errorDetails: string[] = []
   if (!providers.length) {
-    const keyPresent = Boolean(getNewsDataApiKey())
-    const hint = keyPresent
-      ? 'NEWSDATA_API present but provider build failed'
-      : 'Missing NEWSDATA_API. Set it in Vercel env or a local .env file.'
-    const err: any = new Error('No providers configured')
-    err.hint = hint
+    const err: any = new Error('No providers configured (WEBZ_API missing)')
+    err.hint = 'Set WEBZ_API in your environment (Vercel env or local .env)'
     throw err
   }
   // Use providers as supplied by getProviders* (but prefer Webz when source filters are present)
@@ -176,20 +126,8 @@ export async function tryProvidersSequential(
           continue
         }
       }
-      // Build attempt variants for NewsData to reduce 422/empty cases
       const variants: Array<{ label: string; o: any }> = []
-      if (p.type === 'newsdata') {
-        variants.push({ label: 'as-is', o: { ...opts } })
-        variants.push({ label: 'no-pagination', o: { ...opts, _noPagination: true } })
-        variants.push({ label: 'no-category', o: { ...opts, category: undefined } })
-        variants.push({ label: 'no-domains-sources', o: { ...opts, domains: [], sources: [] } })
-        variants.push({ label: 'no-q', o: { ...opts, q: undefined } })
-        variants.push({ label: 'no-country', o: { ...opts, country: undefined } })
-        variants.push({
-          label: 'minimal',
-          o: { page: opts.page, pageSize: opts.pageSize, country: opts.country },
-        })
-      } else if (p.type === 'webz') {
+      if (p.type === 'webz') {
         variants.push({ label: 'as-is', o: { ...opts } })
         variants.push({ label: 'no-category', o: { ...opts, category: undefined } })
         variants.push({ label: 'no-domains-sources', o: { ...opts, domains: [], sources: [] } })
@@ -210,16 +148,7 @@ export async function tryProvidersSequential(
           if (p.type === 'webz') {
             spend('webz', getWebzCallCost())
           }
-          // NewsData sometimes returns 200 with status: 'error' in body
-          if (p.type === 'newsdata') {
-            const statusField = String(json?.status || '').toLowerCase()
-            if (statusField && statusField !== 'success') {
-              const msg = json?.message || json?.results?.message || 'Upstream error'
-              const errAny: any = new Error(`Upstream status:${statusField} ${msg}`)
-              errAny.status = 422
-              throw errAny
-            }
-          }
+          // No special status handling needed for Webz
           let items = req.pick(json)
           if (Array.isArray(items) && items.length) {
             recordSuccess(p.type, items.length)

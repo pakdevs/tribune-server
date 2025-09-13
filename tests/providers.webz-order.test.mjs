@@ -5,11 +5,8 @@ import { tryProvidersSequential } from '../api/_providers.ts'
 // This test checks that when domains/sources filters are present,
 // the provider ordering prefers Webz and the query includes site: and site_type:news.
 
-test('prefers Webz for source/domain filtering and builds proper query', async () => {
-  const providers = [
-    { type: 'newsdata', key: 'pub_dummy' },
-    { type: 'webz', key: 'token_dummy' },
-  ]
+test('uses Webz for source/domain filtering and builds proper query', async () => {
+  const providers = [{ type: 'webz', key: 'token_dummy' }]
 
   const opts = {
     page: 1,
@@ -33,15 +30,12 @@ test('prefers Webz for source/domain filtering and builds proper query', async (
         ],
       }
     }
-    if (url.includes('newsdata.io')) {
-      return { status: 'success', results: [] }
-    }
     return { results: [] }
   }
 
   const res = await tryProvidersSequential(providers, 'top', opts, fetcher)
   assert.equal(res.provider, 'webz', 'should select webz as provider')
-  assert.equal(res.attempts[0], 'webz', 'webz should be attempted first with domain filter')
+  assert.equal(res.attempts[0], 'webz', 'webz should be attempted first')
   assert.ok(
     decodeURIComponent(res.url).includes('site:dawn.com'),
     'query should include site:dawn.com'
