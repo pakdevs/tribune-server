@@ -78,12 +78,23 @@ export default async function handler(req: any, res: any) {
     }:d:${domains.join(',')}:s:${sources.join(',')}:q:${q}`
     let flight = getInFlight(flightKey)
     if (!flight) {
+      // Enforce country filter for "from" scope via Webz field filter on Lite:
+      // This adds site.country:PK to the query (Lite doesn't accept countries= param)
+      const enforcedQ = scope === 'from' ? [q, 'site.country:PK'].filter(Boolean).join(' AND ') : q
       flight = setInFlight(
         flightKey,
         tryProvidersSequential(
           providers,
           'top',
-          { page: pageNum, pageSize: pageSizeNum, country, domains, sources, q, pageToken },
+          {
+            page: pageNum,
+            pageSize: pageSizeNum,
+            country,
+            domains,
+            sources,
+            q: enforcedQ,
+            pageToken,
+          },
           (url, headers) => upstreamJson(url, headers)
         )
       )
@@ -203,6 +214,7 @@ export default async function handler(req: any, res: any) {
     if (domains.length) res.setHeader('X-PK-Domains', domains.join(','))
     if (sources.length) res.setHeader('X-PK-Sources', sources.join(','))
     res.setHeader('X-Provider-Articles', String(normalized.length))
+    if (scope === 'from') res.setHeader('X-PK-Enforced-Country', 'PK')
     // Budget usage observability (Webz)
     try {
       res.setHeader('X-Webz-Used-Today', String(getUsedToday('webz')))
@@ -217,6 +229,7 @@ export default async function handler(req: any, res: any) {
     })
     cache(res, 300, 60)
     if (String(req.query.debug) === '1') {
+      const effectiveQ = scope === 'from' ? [q, 'site.country:PK'].filter(Boolean).join(' AND ') : q
       return res.status(200).json({
         items: normalized,
         debug: {
@@ -229,7 +242,7 @@ export default async function handler(req: any, res: any) {
           country,
           domains,
           sources,
-          q: q || null,
+          q: effectiveQ || null,
         },
       })
     }
