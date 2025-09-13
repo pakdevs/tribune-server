@@ -93,6 +93,7 @@ export default async function handler(req: any, res: any) {
             domains,
             sources,
             q: enforcedQ,
+            pinQ: scope === 'from',
             pageToken,
           },
           (url, headers) => upstreamJson(url, headers)

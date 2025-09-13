@@ -127,11 +127,12 @@ export async function tryProvidersSequential(
         }
       }
       const variants: Array<{ label: string; o: any }> = []
+      const pinQ = Boolean((opts as any)?.pinQ)
       if (p.type === 'webz') {
         variants.push({ label: 'as-is', o: { ...opts } })
         variants.push({ label: 'no-category', o: { ...opts, category: undefined } })
         variants.push({ label: 'no-domains-sources', o: { ...opts, domains: [], sources: [] } })
-        variants.push({ label: 'no-q', o: { ...opts, q: undefined } })
+        if (!pinQ) variants.push({ label: 'no-q', o: { ...opts, q: undefined } })
         variants.push({ label: 'no-country', o: { ...opts, country: undefined } })
       } else {
         variants.push({ label: 'as-is', o: { ...opts } })
