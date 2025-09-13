@@ -279,6 +279,15 @@ export default async function handler(req: any, res: any) {
       res.setHeader('X-Provider-Articles', String(stale.items.length))
       return res.status(200).json({ items: stale.items, stale: true })
     }
+    // Pass through upstream 429 when no stale cache is available
+    const status = Number(e?.status || (/(\b\d{3}\b)/.exec(String(e?.message))?.[1] ?? '0'))
+    if (status === 429) {
+      const ra = e?.retryAfter
+      if (ra) res.setHeader('Retry-After', String(ra))
+      return res
+        .status(429)
+        .json({ error: 'Rate limited', message: 'Upstream 429', retryAfter: ra || undefined })
+    }
     if (String(req.query.debug) === '1') {
       return res.status(500).json({ error: 'Proxy failed', message: e?.message || String(e) })
     }
