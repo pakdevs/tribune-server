@@ -10,6 +10,14 @@ export default async function handler(req: any, res: any) {
   if (req.method === 'OPTIONS') return res.status(204).end()
   // Minimal rate limiting: 60 req / 60s per IP
   try {
+    const RL_ENABLED = String(process.env.RL_ENABLED || '1') === '1'
+    const RL_MAX = Math.max(1, parseInt(String(process.env.RL_MAX || '60'), 10) || 60)
+    const RL_WINDOW_MS = Math.max(
+      1000,
+      parseInt(String(process.env.RL_WINDOW_MS || '60000'), 10) || 60000
+    )
+    const RL_RETRY_AFTER = String(process.env.RL_RETRY_AFTER || '30')
+    if (!RL_ENABLED) throw new Error('RL disabled')
     const ip = String(
       req.headers['x-forwarded-for'] || req.headers['x-real-ip'] || req.socket?.remoteAddress || ''
     )
@@ -17,9 +25,9 @@ export default async function handler(req: any, res: any) {
     const now = Date.now()
     ;(globalThis as any).__rl = (globalThis as any).__rl || new Map<string, number[]>()
     const rl: Map<string, number[]> = (globalThis as any).__rl
-    const arr = (rl.get(key) || []).filter((t) => now - t < 60_000)
-    if (arr.length >= 60) {
-      res.setHeader('Retry-After', '30')
+    const arr = (rl.get(key) || []).filter((t) => now - t < RL_WINDOW_MS)
+    if (arr.length >= RL_MAX) {
+      res.setHeader('Retry-After', RL_RETRY_AFTER)
       return res.status(429).json({ error: 'Too Many Requests' })
     }
     arr.push(now)
