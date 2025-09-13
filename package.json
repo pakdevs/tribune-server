@@ -14,5 +14,8 @@
   "devDependencies": {
     "dotenv": "^16.4.5",
     "tsx": "^4.20.5"
+  },
+  "dependencies": {
+    "@vercel/kv": "^3.0.0"
   }
 }

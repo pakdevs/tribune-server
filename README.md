@@ -13,6 +13,8 @@ Production-focused serverless API aggregator providing normalized news articles 
 | US Top (legacy single provider) | `GET /api/top`                   | Deprecated                                                                   |
 | Search (global)                 | `GET /api/search?q=term`         | Backed by Webz.io (domain/source filters supported)                          |
 | Provider stats (ephemeral)      | `GET /api/stats`                 | In-memory counts (resets on cold start)                                      |
+| Trending topics (new)           | `GET /api/trending/topics`       | Returns `{ region, asOf, topics[] }` (KV/in-memory cached)                   |
+| About Pakistan (wrapper)        | `GET /api/feeds/about-pakistan`  | Same as `/api/pk?scope=about` with clearer path                              |
 
 All successful responses: `{ items: Article[] }` (empty array if no matches). Errors: `{ error: string, message? }`.
 
@@ -87,6 +89,11 @@ Minimal (no build step):
 ```
 vercel dev
 ```
+
+### Scheduling and KV (Optional)
+
+- Vercel Cron: configured in `vercel.json` to hit `/api/trending/topics?region=pk` every 15 minutes to warm caches.
+- Vercel KV (optional): if `@vercel/kv` is installed and environment configured, trending topics will read/write a `topics:pk:latest` key for cross-instance consistency.
 
 ## Future Enhancements (Not Yet Implemented)
 
