@@ -90,10 +90,38 @@ Minimal (no build step):
 vercel dev
 ```
 
+## Testing
+
+Quick manual links are available at the root page (index.html). Deployed: https://tribune-server.vercel.app
+
+Automated smoke (production by default):
+
+```
+npm run smoke
+
+# Or specify an alternative base
+$env:BASE_URL = "http://localhost:3000"; npm run smoke
+```
+
+The smoke script hits:
+
+- /api/world?page=1
+- /api/pk?page=1
+- /api/pk?scope=from&page=1
+- /api/pk?scope=about&page=1
+- /api/trending/topics?region=pk
+
+Notes:
+
+- 429 (Rate limited) is expected if you bypass cache a lot; remove nocache in manual tests.
+- Use `&debug=1` to inspect provider/cache headers quickly.
+
 ### Scheduling and KV (Optional)
 
-- Vercel Cron: configured in `vercel.json` to hit `/api/trending/topics?region=pk` every 15 minutes to warm caches.
-- Vercel KV (optional): if `@vercel/kv` is installed and environment configured, trending topics will read/write a `topics:pk:latest` key for cross-instance consistency.
+- Cron (currently disabled): On the Hobby plan, only one daily cron is allowed. We’ve removed the 15‑minute cron from `vercel.json` during testing and rely on direct pulls with CDN caching.
+- Re‑enable later: When upgrading to Pro (or if you prefer), add a 15‑minute cron back to warm `/api/trending/topics?region=pk` and any hot feeds.
+- External scheduler option: You can use GitHub Actions or UptimeRobot to ping endpoints every 15 minutes for free.
+- Vercel KV (optional): If `@vercel/kv` is installed and env configured, trending topics will read/write a `topics:pk:latest` key for cross‑instance consistency.
 
 ## Future Enhancements (Not Yet Implemented)
 
