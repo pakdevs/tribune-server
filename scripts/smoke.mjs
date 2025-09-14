@@ -47,7 +47,7 @@ async function main() {
     ['/api/pk?page=1', 'PK top (mixed)'],
     ['/api/pk?scope=from&page=1', 'PK From'],
     ['/api/pk?scope=about&page=1', 'PK About'],
-  ['/api/trending/topics?region=pk&debug=1', 'Trending topics (PK)'],
+    ['/api/trending/topics?region=pk&debug=1', 'Trending topics (PK)'],
   ]
   console.log(`Base: ${BASE_URL}`)
   const results = []

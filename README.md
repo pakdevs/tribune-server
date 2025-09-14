@@ -155,15 +155,17 @@ Proprietary – internal project (add a license if distributing externally).
 To gently warm CDN/in-memory caches without Vercel Cron (Hobby):
 
 - Manual run via GitHub Actions:
-   1. Go to Actions → "Ping API warm-up"
-   2. Click "Run workflow"
-   3. Provide base_url (e.g., `https://your-app.vercel.app`) and optional delay_ms
+
+  1.  Go to Actions → "Ping API warm-up"
+  2.  Click "Run workflow"
+  3.  Provide base_url (e.g., `https://your-app.vercel.app`) and optional delay_ms
 
 - Local run:
-   ```powershell
-   cd tribune-server
-   $env:BASE_URL = "https://your-app.vercel.app"
-   npm run warmup
-   ```
+
+  ```powershell
+  cd tribune-server
+  $env:BASE_URL = "https://your-app.vercel.app"
+  npm run warmup
+  ```
 
 - Enable a schedule later (optional): edit `.github/workflows/ping.yml` and uncomment the `schedule` block to ping every 15 minutes.

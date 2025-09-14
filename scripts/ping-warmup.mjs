@@ -30,7 +30,9 @@ async function hit(path) {
     const xcache = res.headers.get('x-cache') || ''
     const ra = res.headers.get('retry-after') || ''
     let body = null
-    try { body = await res.json() } catch {}
+    try {
+      body = await res.json()
+    } catch {}
     const items = Array.isArray(body?.items) ? body.items.length : undefined
     return { ok: res.ok, status: res.status, ms, xcache, retryAfter: ra, items }
   } catch (e) {
@@ -60,7 +62,9 @@ async function main() {
     if (!r) {
       console.log(`- ${path} -> no response`)
     } else if (r.ok) {
-      console.log(`- ${path} -> ${r.status} in ${r.ms}ms, items=${r.items ?? '—'}, cache=${r.xcache || '—'}`)
+      console.log(
+        `- ${path} -> ${r.status} in ${r.ms}ms, items=${r.items ?? '—'}, cache=${r.xcache || '—'}`
+      )
     } else if (r.status === 429) {
       console.log(`- ${path} -> 429 (rate limited) retryAfter=${r.retryAfter || '—'}`)
     } else {

@@ -204,10 +204,7 @@ export default async function handler(req: any, res: any) {
     // On failure: prefer serving stale from KV or in-memory cache.
     try {
       const region = String(req.query.region || 'pk').toLowerCase()
-      const limit = Math.max(
-        1,
-        Math.min(20, parseInt(String(req.query.limit || '10'), 10) || 10)
-      )
+      const limit = Math.max(1, Math.min(20, parseInt(String(req.query.limit || '10'), 10) || 10))
       const key = makeKey(['trending', 'topics', region, limit])
       // Try KV stale first
       try {
@@ -247,7 +244,9 @@ export default async function handler(req: any, res: any) {
         .json({ error: 'Rate limited', message: 'Upstream 429', retryAfter: ra || undefined })
     }
     if (String(req.query.debug) === '1') {
-      return res.status(500).json({ error: 'Failed to compute trending topics', message: String(e?.message || e) })
+      return res
+        .status(500)
+        .json({ error: 'Failed to compute trending topics', message: String(e?.message || e) })
     }
     return res.status(500).json({ error: 'Failed to compute trending topics' })
   }
