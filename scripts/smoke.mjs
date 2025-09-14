@@ -47,7 +47,7 @@ async function main() {
     ['/api/pk?page=1', 'PK top (mixed)'],
     ['/api/pk?scope=from&page=1', 'PK From'],
     ['/api/pk?scope=about&page=1', 'PK About'],
-    ['/api/trending/topics?region=pk', 'Trending topics (PK)'],
+  ['/api/trending/topics?region=pk&debug=1', 'Trending topics (PK)'],
   ]
   console.log(`Base: ${BASE_URL}`)
   const results = []
@@ -61,7 +61,12 @@ async function main() {
         }`
       )
     } else {
-      console.log(`✖ ${label} — error: ${r.error || (r.info && r.info.status)}`)
+      if (r.info && r.body && r.info.status >= 400) {
+        const extra = [r.body.error, r.body.message].filter(Boolean).join(' | ')
+        console.log(`✖ ${label} — ${r.info.status}${extra ? ` (${extra})` : ''}`)
+      } else {
+        console.log(`✖ ${label} — error: ${r.error || (r.info && r.info.status)}`)
+      }
     }
   }
   // Summarize 429 separately (not a hard failure in testing)

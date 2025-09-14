@@ -10,7 +10,8 @@
     "lint": "eslint api --ext .js",
     "format": "prettier --write \"**/*.{js,json,md}\"",
     "test": "tsx --test tests/*.mjs",
-    "smoke": "node scripts/smoke.mjs"
+    "smoke": "node scripts/smoke.mjs",
+    "warmup": "node scripts/ping-warmup.mjs"
   },
   "devDependencies": {
     "dotenv": "^16.4.5",

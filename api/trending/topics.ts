@@ -153,41 +153,38 @@ export default async function handler(req: any, res: any) {
     }
 
     res.setHeader('X-Cache', 'MISS')
-    // Simple on-demand aggregation: pull PK-from and PK-mention sets, then score tokens
-    const providers = region === 'pk' ? getProvidersForPK() : getProvidersForPK()
-    const fetcher = (url: string, headers: Record<string, string>) => upstreamJson(url, headers)
-
-    // 1) From PK: enforce country via q expression for Lite
-    const fromRes = await tryProvidersSequential(
-      providers,
-      'top',
-      {
-        page: 1,
-        pageSize: 10,
-        country: 'pk',
-        q: 'site.country:PK',
-        pinQ: true,
-      },
-      fetcher
-    )
-
-    // 2) Mentions of Pakistan (about)
-    const aboutRes = await tryProvidersSequential(
-      providers,
-      'top',
-      {
-        page: 1,
-        pageSize: 10,
-        country: undefined,
-        q: 'Pakistan',
-      },
-      fetcher
-    )
-
+    // Prefer using our own API (which benefits from CDN and stale cache) to reduce upstream calls.
+    const proto = String(req.headers['x-forwarded-proto'] || 'https')
+    const host = String(req.headers['x-forwarded-host'] || req.headers.host || 'localhost')
+    const base = `${proto}://${host}`
+    const fromReqUrl = `${base}/api/pk?scope=from&page=1`
+    const aboutReqUrl = `${base}/api/pk?scope=about&page=1`
+    const headers = { 'user-agent': 'tribune/trending/1.0' }
+    const [a, b] = await Promise.allSettled([
+      upstreamJson(fromReqUrl, headers),
+      upstreamJson(aboutReqUrl, headers),
+    ])
+    const fromRes = a.status === 'fulfilled' ? (a.value as any) : null
+    const aboutRes = b.status === 'fulfilled' ? (b.value as any) : null
     const raws = [
-      ...(Array.isArray(fromRes.items) ? fromRes.items : []),
-      ...(Array.isArray(aboutRes.items) ? aboutRes.items : []),
+      ...(Array.isArray(fromRes?.items) ? fromRes!.items : []),
+      ...(Array.isArray(aboutRes?.items) ? aboutRes!.items : []),
     ]
+    if (raws.length === 0) {
+      // If both failed, attempt to detect 429 and propagate appropriately so clients can retry.
+      const errs: any[] = []
+      if (a.status === 'rejected') errs.push(a.reason)
+      if (b.status === 'rejected') errs.push(b.reason)
+      const any429 = errs.some((e) => Number(e?.status) === 429)
+      if (any429) {
+        const ra = errs.find((e) => e?.retryAfter)?.retryAfter
+        if (ra) res.setHeader('Retry-After', String(ra))
+        return res
+          .status(429)
+          .json({ error: 'Rate limited', message: 'Downstream 429', retryAfter: ra || undefined })
+      }
+      throw new Error('No data available for trending')
+    }
     const normalized = raws.map((r: any) => normalize(r)).filter(Boolean)
     // Build topics
     const topics = scoreTopics(normalized).slice(0, limit)
@@ -204,11 +201,53 @@ export default async function handler(req: any, res: any) {
     cache(res, 300, 60)
     return res.status(200).json(payload)
   } catch (e: any) {
-    const key = makeKey(['trending', 'topics', 'fallback'])
-    const stale = getStale<any>(key)
-    if (stale) {
-      res.setHeader('X-Cache', 'STALE')
-      return res.status(200).json(stale)
+    // On failure: prefer serving stale from KV or in-memory cache.
+    try {
+      const region = String(req.query.region || 'pk').toLowerCase()
+      const limit = Math.max(
+        1,
+        Math.min(20, parseInt(String(req.query.limit || '10'), 10) || 10)
+      )
+      const key = makeKey(['trending', 'topics', region, limit])
+      // Try KV stale first
+      try {
+        const mod: any = await import('@vercel/kv').catch(() => null)
+        const kv = mod?.kv
+        if (kv) {
+          const kvPayload = await kv.get(`topics:${region}:latest`)
+          if (kvPayload) {
+            res.setHeader('X-Cache', 'KV-STALE')
+            cache(res, 120, 60)
+            return res.status(200).json(kvPayload)
+          }
+        }
+      } catch {}
+      // Then try in-memory stale
+      const stale = getStale<any>(key)
+      if (stale) {
+        res.setHeader('X-Cache', 'STALE')
+        cache(res, 120, 60)
+        return res.status(200).json(stale)
+      }
+    } catch {}
+    // If upstream signaled rate limit, propagate 429 with optional Retry-After
+    const status = Number(
+      e?.status ||
+        e?.statusCode ||
+        e?.response?.status ||
+        e?.res?.status ||
+        e?.cause?.response?.status ||
+        (/\b(\d{3})\b/.exec(String(e?.message))?.[1] ?? '0')
+    )
+    if (status === 429) {
+      const ra = e?.retryAfter
+      if (ra) res.setHeader('Retry-After', String(ra))
+      return res
+        .status(429)
+        .json({ error: 'Rate limited', message: 'Upstream 429', retryAfter: ra || undefined })
+    }
+    if (String(req.query.debug) === '1') {
+      return res.status(500).json({ error: 'Failed to compute trending topics', message: String(e?.message || e) })
     }
     return res.status(500).json({ error: 'Failed to compute trending topics' })
   }
