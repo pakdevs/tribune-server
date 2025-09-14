@@ -1,0 +1,41 @@
+name: Ping API warm-up
+
+# Enable manual runs from the Actions tab. You can provide BASE_URL there.
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: 'Base URL of the deployed server (e.g., https://your-app.vercel.app)'
+        required: true
+        type: string
+      delay_ms:
+        description: 'Delay between pings (ms)'
+        required: false
+        default: '5000'
+        type: string
+
+# Hobby-friendly option (disabled by default). Uncomment to ping every 15 minutes:
+# on:
+#   schedule:
+#     - cron: '*/15 * * * *'
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Warm-up endpoints
+        working-directory: tribune-server
+        env:
+          # Prefer manual input; fallback to repo secret if you edit this to use secrets.VERCEL_BASE_URL
+          BASE_URL: ${{ inputs.base_url }}
+          PING_DELAY_MS: ${{ inputs.delay_ms }}
+        run: |
+          node scripts/ping-warmup.mjs
