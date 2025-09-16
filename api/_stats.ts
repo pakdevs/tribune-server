@@ -1,3 +1,5 @@
+import { cacheStats } from './_cache.js'
+
 type ProviderStats = {
   success: number
   empty: number
@@ -53,8 +55,9 @@ export function recordError(name: string, _message?: string) {
 }
 
 export function getStats() {
-  return {
-    ...stats,
-    providers: { ...stats.providers },
-  }
+  let cache: any = null
+  try {
+    cache = cacheStats()
+  } catch {}
+  return { ...stats, providers: { ...stats.providers }, cache }
 }

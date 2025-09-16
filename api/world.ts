@@ -1,6 +1,7 @@
 import { normalize } from './_normalize.js'
-import { cors, cache, upstreamJson } from './_shared.js'
-import { makeKey, getFresh, getStale, setCache } from './_cache.js'
+import { cors, cache, upstreamJson, addCacheDebugHeaders } from './_shared.js'
+import { getFresh, getStale, setCache } from './_cache.js'
+import { buildCacheKey } from './_key.js'
 import { getProvidersForWorld, tryProvidersSequential } from './_providers.js'
 import { getUsedToday } from './_budget.js'
 import { getInFlight, setInFlight } from './_inflight.js'
@@ -51,16 +52,15 @@ export default async function handler(req: any, res: any) {
     .filter(Boolean)
   const q = String(req.query.q || '').trim()
   try {
-    const cacheKey = makeKey([
-      'world',
-      'top',
+    const cacheKey = buildCacheKey('world-top', {
       country,
-      String(pageNum),
-      String(pageSizeNum),
-      pageToken ? 'pt:' + pageToken : '',
-      'd:' + domains.join(','),
-      's:' + sources.join(','),
-    ])
+      page: pageNum,
+      pageSize: pageSizeNum,
+      pageToken,
+      domains,
+      sources,
+      q: q || undefined,
+    })
     const noCache = String(req.query.nocache || '0') === '1'
     if (!noCache) {
       const fresh = getFresh(cacheKey)
@@ -72,6 +72,7 @@ export default async function handler(req: any, res: any) {
           res.setHeader('X-Provider-Attempts-Detail', fresh.meta.attemptsDetail.join(','))
         res.setHeader('X-Provider-Articles', String(fresh.items.length))
         cache(res, 600, 120)
+        await addCacheDebugHeaders(res, req)
         return res.status(200).json({ items: fresh.items })
       }
     }
@@ -139,6 +140,7 @@ export default async function handler(req: any, res: any) {
     })
     cache(res, 600, 120)
     if (String(req.query.debug) === '1') {
+      await addCacheDebugHeaders(res, req)
       return res.status(200).json({
         items: normalized,
         debug: {
@@ -156,6 +158,7 @@ export default async function handler(req: any, res: any) {
         },
       })
     }
+    await addCacheDebugHeaders(res, req)
     return res.status(200).json({ items: normalized })
   } catch (e: any) {
     const country = String(req.query.country || 'us')
@@ -167,14 +170,12 @@ export default async function handler(req: any, res: any) {
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean)
-    const cacheKey = makeKey([
-      'world',
-      'top',
+    const cacheKey = buildCacheKey('world-top', {
       country,
-      String(pageNum),
-      String(pageSizeNum),
-      'd:' + domains.join(','),
-    ])
+      page: pageNum,
+      pageSize: pageSizeNum,
+      domains,
+    })
     const stale = getStale(cacheKey)
     if (stale) {
       res.setHeader('X-Cache', 'STALE')

@@ -1,5 +1,6 @@
-import { cors, cache, upstreamJson } from '../_shared.js'
-import { makeKey, getFresh, getStale, setCache } from '../_cache.js'
+import { cors, cache, upstreamJson, addCacheDebugHeaders } from '../_shared.js'
+import { getFresh, getStale, setCache, setNegativeCache, getAny } from '../_cache.js'
+import { buildCacheKey } from '../_key.js'
 import { normalize } from '../_normalize.js'
 import { getProvidersForPK, tryProvidersSequential } from '../_providers.js'
 
@@ -129,7 +130,7 @@ export default async function handler(req: any, res: any) {
     const region = String(req.query.region || 'pk').toLowerCase()
     const limit = Math.max(1, Math.min(20, parseInt(String(req.query.limit || '10'), 10) || 10))
     const noCache = String(req.query.nocache || '0') === '1'
-    const key = makeKey(['trending', 'topics', region, limit])
+    const key = buildCacheKey('trending-topics', { region, limit })
     // Try KV first (if available), then in-memory cache
     try {
       if (!noCache) {
@@ -145,10 +146,18 @@ export default async function handler(req: any, res: any) {
         }
       }
     } catch {}
+    const any = !noCache ? getAny(key) : null
+    if (any && any.negative) {
+      res.setHeader('X-Cache', 'NEGATIVE')
+      cache(res, 60, 60)
+      await addCacheDebugHeaders(res, req)
+      return res.status(200).json({ region, topics: [], negative: true })
+    }
     const fresh = !noCache ? getFresh<any>(key) : null
     if (fresh) {
       res.setHeader('X-Cache', 'HIT')
       cache(res, 300, 60)
+      await addCacheDebugHeaders(res, req)
       return res.status(200).json(fresh)
     }
 
@@ -199,13 +208,14 @@ export default async function handler(req: any, res: any) {
       }
     } catch {}
     cache(res, 300, 60)
+    await addCacheDebugHeaders(res, req)
     return res.status(200).json(payload)
   } catch (e: any) {
     // On failure: prefer serving stale from KV or in-memory cache.
     try {
       const region = String(req.query.region || 'pk').toLowerCase()
       const limit = Math.max(1, Math.min(20, parseInt(String(req.query.limit || '10'), 10) || 10))
-      const key = makeKey(['trending', 'topics', region, limit])
+      const key = buildCacheKey('trending-topics', { region, limit })
       // Try KV stale first
       try {
         const mod: any = await import('@vercel/kv').catch(() => null)
@@ -243,7 +253,16 @@ export default async function handler(req: any, res: any) {
         .status(429)
         .json({ error: 'Rate limited', message: 'Upstream 429', retryAfter: ra || undefined })
     }
+    if (status !== 429) {
+      try {
+        const region = String(req.query.region || 'pk').toLowerCase()
+        const limit = Math.max(1, Math.min(20, parseInt(String(req.query.limit || '10'), 10) || 10))
+        const key = buildCacheKey('trending-topics', { region, limit })
+        setNegativeCache(key)
+      } catch {}
+    }
     if (String(req.query.debug) === '1') {
+      await addCacheDebugHeaders(res, req)
       return res
         .status(500)
         .json({ error: 'Failed to compute trending topics', message: String(e?.message || e) })

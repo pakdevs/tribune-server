@@ -1,6 +1,7 @@
 import { normalize } from '../../_normalize.js'
-import { cors, cache, upstreamJson } from '../../_shared.js'
-import { makeKey, getFresh, getStale, setCache } from '../../_cache.js'
+import { cors, cache, upstreamJson, addCacheDebugHeaders } from '../../_shared.js'
+import { getFresh, getStale, setCache, setNegativeCache, getAny } from '../../_cache.js'
+import { buildCacheKey } from '../../_key.js'
 import { getProvidersForWorld, tryProvidersSequential } from '../../_providers.js'
 
 export default async function handler(req: any, res: any) {
@@ -41,18 +42,23 @@ export default async function handler(req: any, res: any) {
     .map((s) => s.trim())
     .filter(Boolean)
   try {
-    const cacheKey = makeKey([
-      'world',
-      'cat',
+    const cacheKey = buildCacheKey('world-cat', {
       category,
       country,
-      String(pageNum),
-      String(pageSizeNum),
-      'd:' + domains.join(','),
-      's:' + sources.join(','),
-    ])
+      page: pageNum,
+      pageSize: pageSizeNum,
+      domains,
+      sources,
+    })
     const noCache = String(req.query.nocache || '0') === '1'
     if (!noCache) {
+      const any = getAny(cacheKey)
+      if (any && any.negative) {
+        res.setHeader('X-Cache', 'NEGATIVE')
+        cache(res, 30, 30)
+        await addCacheDebugHeaders(res, req)
+        return res.status(200).json({ items: [], negative: true })
+      }
       const fresh = getFresh(cacheKey)
       if (fresh) {
         res.setHeader('X-Cache', 'HIT')
@@ -62,6 +68,7 @@ export default async function handler(req: any, res: any) {
           res.setHeader('X-Provider-Attempts-Detail', fresh.meta.attemptsDetail.join(','))
         res.setHeader('X-Provider-Articles', String(fresh.items.length))
         cache(res, 600, 120)
+        await addCacheDebugHeaders(res, req)
         return res.status(200).json({ items: fresh.items })
       }
     }
@@ -92,6 +99,7 @@ export default async function handler(req: any, res: any) {
     })
     cache(res, 600, 120)
     if (String(req.query.debug) === '1') {
+      await addCacheDebugHeaders(res, req)
       return res.status(200).json({
         items: normalized,
         debug: {
@@ -105,16 +113,15 @@ export default async function handler(req: any, res: any) {
         },
       })
     }
+    await addCacheDebugHeaders(res, req)
     return res.status(200).json({ items: normalized })
   } catch (e: any) {
-    const cacheKey = makeKey([
-      'world',
-      'cat',
+    const cacheKey = buildCacheKey('world-cat', {
       category,
       country,
-      String(pageNum),
-      String(pageSizeNum),
-    ])
+      page: pageNum,
+      pageSize: pageSizeNum,
+    })
     const stale = getStale(cacheKey)
     if (stale) {
       res.setHeader('X-Cache', 'STALE')
@@ -126,7 +133,11 @@ export default async function handler(req: any, res: any) {
       res.setHeader('X-Provider-Articles', String(stale.items.length))
       return res.status(200).json({ items: stale.items, stale: true })
     }
+    // Negative caching (exclude 429)
+    const status = Number(e?.status || (/\b(\d{3})\b/.exec(String(e?.message))?.[1] ?? '0'))
+    if (status !== 429) setNegativeCache(cacheKey)
     if (String(req.query.debug) === '1') {
+      await addCacheDebugHeaders(res, req)
       return res.status(500).json({ error: 'Proxy failed', message: e?.message || String(e) })
     }
     return res.status(500).json({ error: 'Proxy failed' })

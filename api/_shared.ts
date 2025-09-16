@@ -21,14 +21,35 @@ export function cors(res: any) {
 }
 
 export function cache(res: any, seconds = 300, swr = 60) {
-  const s = Number((process as any)?.env?.CACHE_SMAXAGE ?? seconds)
-  const w = Number((process as any)?.env?.CACHE_SWR ?? swr)
-  res.setHeader(
-    'Cache-Control',
-    `s-maxage=${Number.isFinite(s) ? s : seconds}, stale-while-revalidate=${
-      Number.isFinite(w) ? w : swr
-    }`
-  )
+  const envFresh = parseInt(String((process as any)?.env?.CACHE_FRESH_TTL || ''), 10)
+  const envStaleExtra = parseInt(String((process as any)?.env?.CACHE_STALE_EXTRA || ''), 10)
+  const fresh = Number.isFinite(envFresh) ? Math.min(1800, Math.max(5, envFresh)) : seconds
+  const swrTotal = Number.isFinite(envStaleExtra) ? Math.min(7200, Math.max(0, envStaleExtra)) : swr
+  // Use s-maxage for CDN, and let browser honor revalidation separately (could add max-age if desired)
+  res.setHeader('Cache-Control', `public, s-maxage=${fresh}, stale-while-revalidate=${swrTotal}`)
+}
+
+// Attach debug cache metrics (lightweight) when requested
+export async function addCacheDebugHeaders(res: any, req?: any) {
+  try {
+    if (!req) return
+    if (String(req.query?.debug) !== '1') return
+    const mod: any = await import('./_cache.js')
+    const stats = mod.cacheStats?.()
+    if (!stats) return
+    res.setHeader('X-Cache-Hits-Fresh', String(stats.hitsFresh))
+    res.setHeader('X-Cache-Hits-Stale', String(stats.hitsStale))
+    res.setHeader('X-Cache-Misses', String(stats.misses))
+    res.setHeader('X-Cache-Negative-Hits', String(stats.negativeHits))
+    res.setHeader('X-Cache-Negative-Puts', String(stats.negativePuts))
+    res.setHeader('X-Cache-Evict-LRU', String(stats.evictionsLRU))
+    res.setHeader('X-Cache-Evict-Expired', String(stats.evictionsExpired))
+    res.setHeader('X-Cache-Size', String(stats.size))
+    res.setHeader('X-Cache-Capacity', String(stats.capacity))
+    res.setHeader('X-Cache-Hit-Ratio', stats.hitRatio.toFixed(4))
+    res.setHeader('X-Cache-Fresh-Ratio', stats.freshRatio.toFixed(4))
+    res.setHeader('X-Cache-Stale-Ratio', stats.staleRatio.toFixed(4))
+  } catch {}
 }
 
 export async function upstreamJson(

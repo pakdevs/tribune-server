@@ -1,7 +1,8 @@
 import { normalize } from './_normalize.js'
 import { dedupeByTitle } from './_dedupe.js'
-import { cors, cache, upstreamJson } from './_shared.js'
-import { makeKey, getFresh, getStale, setCache } from './_cache.js'
+import { cors, cache, upstreamJson, addCacheDebugHeaders } from './_shared.js'
+import { getFresh, getStale, setCache } from './_cache.js'
+import { buildCacheKey } from './_key.js'
 import { getProvidersForPK, tryProvidersSequential } from './_providers.js'
 import { getUsedToday } from './_budget.js'
 import { getInFlight, setInFlight } from './_inflight.js'
@@ -52,17 +53,16 @@ export default async function handler(req: any, res: any) {
     .filter(Boolean)
   const q = String(req.query.q || '').trim()
   try {
-    const cacheKey = makeKey([
-      'pk',
-      'top',
+    const cacheKey = buildCacheKey('pk-top', {
       country,
-      'scope:' + scope,
-      String(pageNum),
-      String(pageSizeNum),
-      pageToken ? 'pt:' + pageToken : '',
-      'd:' + domains.join(','),
-      's:' + sources.join(','),
-    ])
+      scope,
+      page: pageNum,
+      pageSize: pageSizeNum,
+      pageToken,
+      domains,
+      sources,
+      q: q || undefined,
+    })
     const noCache = String(req.query.nocache || '0') === '1'
     if (!noCache) {
       const fresh = getFresh(cacheKey)
@@ -74,6 +74,7 @@ export default async function handler(req: any, res: any) {
           res.setHeader('X-Provider-Attempts-Detail', fresh.meta.attemptsDetail.join(','))
         res.setHeader('X-Provider-Articles', String(fresh.items.length))
         cache(res, 300, 60)
+        await addCacheDebugHeaders(res, req)
         return res.status(200).json({ items: fresh.items })
       }
     }
@@ -238,6 +239,7 @@ export default async function handler(req: any, res: any) {
     })
     cache(res, 300, 60)
     if (String(req.query.debug) === '1') {
+      await addCacheDebugHeaders(res, req)
       const effectiveQ = scope === 'from' ? [q, 'site.country:PK'].filter(Boolean).join(' AND ') : q
       return res.status(200).json({
         items: normalized,
@@ -255,19 +257,18 @@ export default async function handler(req: any, res: any) {
         },
       })
     }
+    await addCacheDebugHeaders(res, req)
     return res.status(200).json({ items: normalized })
   } catch (e: any) {
     const page = String(req.query.page || '1')
     const pageSize = '10'
     const country = 'pk'
-    const cacheKey = makeKey([
-      'pk',
-      'top',
+    const cacheKey = buildCacheKey('pk-top', {
       country,
-      String(pageNum),
-      String(pageSizeNum),
-      'd:' + domains.join(','),
-    ])
+      page: pageNum,
+      pageSize: pageSizeNum,
+      domains,
+    })
     const stale = getStale(cacheKey)
     if (stale) {
       res.setHeader('X-Cache', 'STALE')

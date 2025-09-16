@@ -1,6 +1,7 @@
 import { normalize } from './_normalize.js'
-import { cors, cache, upstreamJson } from './_shared.js'
-import { makeKey, getFresh, getStale, setCache } from './_cache.js'
+import { cors, cache, upstreamJson, addCacheDebugHeaders } from './_shared.js'
+import { getFresh, getStale, setCache } from './_cache.js'
+import { buildCacheKey } from './_key.js'
 import { getProvidersForWorld, tryProvidersSequential } from './_providers.js'
 import { getInFlight, setInFlight } from './_inflight.js'
 
@@ -50,7 +51,12 @@ export default async function handler(req: any, res: any) {
   const mapped = rawCategory ? alias[rawCategory] || rawCategory : 'general'
   const category = allowed.has(mapped) ? mapped : 'general'
   try {
-    const cacheKey = makeKey(['top', country, category, String(pageNum), String(pageSizeNum)])
+    const cacheKey = buildCacheKey('top', {
+      country,
+      category,
+      page: pageNum,
+      pageSize: pageSizeNum,
+    })
     const noCache = String(req.query.nocache || '0') === '1'
     if (!noCache) {
       const fresh = getFresh(cacheKey)
@@ -62,6 +68,7 @@ export default async function handler(req: any, res: any) {
           res.setHeader('X-Provider-Attempts-Detail', fresh.meta.attemptsDetail.join(','))
         res.setHeader('X-Provider-Articles', String(fresh.items.length))
         cache(res, 300, 60)
+        await addCacheDebugHeaders(res, req)
         return res.status(200).json({ items: fresh.items })
       }
     }
@@ -97,6 +104,7 @@ export default async function handler(req: any, res: any) {
     res.setHeader('X-Provider-Articles', String(normalized.length))
     cache(res, 300, 60)
     if (String(req.query.debug) === '1') {
+      await addCacheDebugHeaders(res, req)
       return res.status(200).json({
         items: normalized,
         debug: {
@@ -111,6 +119,7 @@ export default async function handler(req: any, res: any) {
         },
       })
     }
+    await addCacheDebugHeaders(res, req)
     return res.status(200).json({ items: normalized })
   } catch (e: any) {
     const country = String(req.query.country || 'us')
@@ -121,7 +130,12 @@ export default async function handler(req: any, res: any) {
     const rawCategory = req.query.category ? String(req.query.category).toLowerCase() : 'general'
     const mapped = rawCategory ? alias[rawCategory] || rawCategory : 'general'
     const category = allowed.has(mapped) ? mapped : 'general'
-    const cacheKey = makeKey(['top', country, category, String(pageNum), String(pageSizeNum)])
+    const cacheKey = buildCacheKey('top', {
+      country,
+      category,
+      page: pageNum,
+      pageSize: pageSizeNum,
+    })
     const stale = getStale(cacheKey)
     if (stale) {
       res.setHeader('X-Cache', 'STALE')
