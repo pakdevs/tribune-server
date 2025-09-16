@@ -1,6 +1,13 @@
 import { normalize } from '../../_normalize.js'
 import { cors, cache, addCacheDebugHeaders } from '../../_shared.js'
-import { getFresh, getStale, setCache, setNegativeCache, getAny } from '../../_cache.js'
+import {
+  getFresh,
+  getStale,
+  setCache,
+  setNegativeCache,
+  getAny,
+  getFreshOrL2,
+} from '../../_cache.js'
 import { buildCacheKey } from '../../_key.js'
 import { getProvidersForWorld, buildProviderRequest } from '../../_providers.js'
 import { getSourceDomains } from '../../_sourceDomains.js'
@@ -61,7 +68,7 @@ export default async function handler(req: any, res: any) {
         await addCacheDebugHeaders(res, req)
         return res.status(200).json({ items: [], negative: true })
       }
-      const fresh = getFresh(cacheKey)
+      const fresh = getFresh(cacheKey) || (await getFreshOrL2(cacheKey))
       if (fresh) {
         res.setHeader('X-Cache', 'HIT')
         res.setHeader('X-Provider', fresh.meta.provider)
@@ -69,6 +76,7 @@ export default async function handler(req: any, res: any) {
         if (fresh.meta.attemptsDetail)
           res.setHeader('X-Provider-Attempts-Detail', fresh.meta.attemptsDetail.join(','))
         res.setHeader('X-Provider-Articles', String(fresh.items.length))
+        if (!getFresh(cacheKey)) res.setHeader('X-Cache-L2', '1')
         cache(res, 300, 60)
         await addCacheDebugHeaders(res, req)
         return res.status(200).json({ items: fresh.items })

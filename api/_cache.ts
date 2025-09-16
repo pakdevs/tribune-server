@@ -1,3 +1,5 @@
+import { l2Set, l2Enabled } from './_l2.js'
+
 type Entry = { data: any; expiresAt: number; staleUntil: number; negative?: boolean }
 
 // Phase 2 additions: LRU + basic metrics
@@ -18,6 +20,10 @@ interface CacheMetrics {
   hitRatio: number
   freshRatio: number
   staleRatio: number
+  l2Hits: number
+  l2Misses: number
+  l2Writes: number
+  l2Promotions: number
 }
 
 // Doubly-linked list node for O(1) LRU updates
@@ -57,6 +63,10 @@ const metrics: CacheMetrics = {
   hitRatio: 0,
   freshRatio: 0,
   staleRatio: 0,
+  l2Hits: 0,
+  l2Misses: 0,
+  l2Writes: 0,
+  l2Promotions: 0,
 }
 
 // Read env once; fallback to previous defaults (90s fresh + 600s stale extra)
@@ -101,6 +111,16 @@ export function setCache(
     } catch {}
   }
   enforceCapacity()
+  // Async write-through to L2 (fire-and-forget). Skip if disabled or payload flagged negative.
+  try {
+    if (l2Enabled() && !payload?.__negative && !payload?.negative) {
+      Promise.resolve(l2Set(key, payload, safeFresh))
+        .then(() => {
+          ;(metrics as any).l2Writes++
+        })
+        .catch(() => {})
+    }
+  } catch {}
 }
 
 export function getFresh<T = any>(key: string): T | null {
@@ -284,6 +304,8 @@ function maybeLog() {
   metrics.lastLog = new Date().toISOString()
   try {
     // Structured single-line JSON for easy ingestion
+    const l2Total = (metrics as any).l2Hits + (metrics as any).l2Misses
+    const l2HitRatio = l2Total ? (metrics as any).l2Hits / l2Total : 0
     console.log(
       JSON.stringify({
         level: 'info',
@@ -302,8 +324,76 @@ function maybeLog() {
           hitRatio: Number(metrics.hitRatio.toFixed(4)),
           freshRatio: Number(metrics.freshRatio.toFixed(4)),
           staleRatio: Number(metrics.staleRatio.toFixed(4)),
+          l2Hits: (metrics as any).l2Hits,
+          l2Misses: (metrics as any).l2Misses,
+          l2Writes: (metrics as any).l2Writes,
+          l2Promotions: (metrics as any).l2Promotions,
+          l2HitRatio: Number(l2HitRatio.toFixed(4)),
         },
       })
     )
+    if (l2Total > 50 && l2HitRatio < 0.1) {
+      console.log(
+        JSON.stringify({
+          level: 'warn',
+          msg: 'l2-low-hit-ratio',
+          l2HitRatio: Number(l2HitRatio.toFixed(4)),
+          l2Hits: (metrics as any).l2Hits,
+          l2Misses: (metrics as any).l2Misses,
+        })
+      )
+    }
   } catch {}
+}
+
+// Phase 3 helper: attempt memory fresh first, then L2 (if enabled). Does NOT promote to memory automatically.
+export async function getFreshOrL2<T = any>(key: string): Promise<T | null> {
+  const v = getFresh<T>(key)
+  if (v !== null) return v
+  try {
+    if (l2Enabled()) {
+      const l2 = await (await import('./_l2.js')).l2Get<T>(key)
+      if (l2 !== null && l2 !== undefined) {
+        ;(metrics as any).l2Hits++
+        // Optional promotion back into memory (fresh only) if env flag set
+        if (String(process.env.L2_PROMOTE_ON_HIT || '1') === '1') {
+          try {
+            // Reinsert with standard fresh TTL (no stale extension change).
+            setCache(key, l2)
+            ;(metrics as any).l2Promotions++
+          } catch {}
+        }
+        return l2
+      } else {
+        ;(metrics as any).l2Misses++
+      }
+    }
+  } catch {}
+  return null
+}
+
+// Test-only utility: remove a key from in-memory store (to simulate cold miss with L2 hit)
+export function __deleteMemoryKey(key: string) {
+  store.delete(key)
+}
+
+// Administrative purge helpers (memory layer only). Use with caution.
+export function purgeKey(key: string) {
+  if (store.delete(key)) {
+    metrics.size = store.size
+    return true
+  }
+  return false
+}
+
+export function purgePrefix(prefix: string) {
+  let count = 0
+  for (const k of store.keys()) {
+    if (k.startsWith(prefix)) {
+      store.delete(k)
+      count++
+    }
+  }
+  if (count) metrics.size = store.size
+  return count
 }

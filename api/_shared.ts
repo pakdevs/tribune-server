@@ -49,6 +49,15 @@ export async function addCacheDebugHeaders(res: any, req?: any) {
     res.setHeader('X-Cache-Hit-Ratio', stats.hitRatio.toFixed(4))
     res.setHeader('X-Cache-Fresh-Ratio', stats.freshRatio.toFixed(4))
     res.setHeader('X-Cache-Stale-Ratio', stats.staleRatio.toFixed(4))
+    if (typeof stats.l2Hits === 'number') {
+      const l2Total = (stats.l2Hits || 0) + (stats.l2Misses || 0)
+      const l2HitRatio = l2Total ? stats.l2Hits / l2Total : 0
+      res.setHeader('X-L2-Hits', String(stats.l2Hits))
+      res.setHeader('X-L2-Misses', String(stats.l2Misses || 0))
+      res.setHeader('X-L2-Writes', String(stats.l2Writes || 0))
+      res.setHeader('X-L2-Promotions', String(stats.l2Promotions || 0))
+      res.setHeader('X-L2-Hit-Ratio', l2HitRatio.toFixed(4))
+    }
   } catch {}
 }
 
