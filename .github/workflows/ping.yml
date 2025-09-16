@@ -25,6 +25,7 @@ jobs:
           DELAY="${{ github.event.inputs.delay_ms }}"
           if [ -z "$BASE" ]; then echo "base_url input is required"; exit 1; fi
           if [ -z "$DELAY" ]; then DELAY=5000; fi
+          BASE="${BASE%/}"  # strip trailing slash
           urls=(
             "$BASE/api/world?page=1"
             "$BASE/api/pk?page=1"
@@ -35,7 +36,7 @@ jobs:
           echo "Warming $BASE with delay ${DELAY}ms"
           for u in "${urls[@]}"; do
             echo "GET $u"
-            # Do not fail the whole job on a single endpoint failure or 429
-            curl -fsS "$u" || echo "Warn: request failed (continuing)"
+            # Follow redirects; don’t fail the whole job on a single failure
+            curl -fsSL "$u" || echo "Warn: request failed (continuing)"
             sleep $((DELAY/1000))
           done
