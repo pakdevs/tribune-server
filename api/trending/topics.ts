@@ -1,5 +1,8 @@
-import { cors, cache, upstreamJson, addCacheDebugHeaders } from '../_shared.js'
+import { cors, cache, upstreamJson, addCacheDebugHeaders } from '..//_shared.js'
+import { withHttpMetrics } from '../_httpMetrics.js'
 import { getFresh, getStale, setCache, setNegativeCache, getAny } from '../_cache.js'
+import { applyEntityHeaders, extractEntityMeta, isNotModified, attachEntityMeta } from '../_http.js'
+import { maybeScheduleRevalidate } from '../_revalidate.js'
 import { buildCacheKey } from '../_key.js'
 import { normalize } from '../_normalize.js'
 import { getProvidersForPK, tryProvidersSequential } from '../_providers.js'
@@ -123,7 +126,7 @@ function scoreTopics(items: any[], now = Date.now()) {
   return out
 }
 
-export default async function handler(req: any, res: any) {
+async function handler(req: any, res: any) {
   cors(res)
   if (req.method === 'OPTIONS') return res.status(204).end()
   try {
@@ -158,6 +161,36 @@ export default async function handler(req: any, res: any) {
       res.setHeader('X-Cache', 'HIT')
       cache(res, 300, 60)
       await addCacheDebugHeaders(res, req)
+      const meta = extractEntityMeta(fresh)
+      if (meta) {
+        if (isNotModified(req, meta)) {
+          applyEntityHeaders(res, meta)
+          return res.status(304).end()
+        }
+        applyEntityHeaders(res, meta)
+      }
+      maybeScheduleRevalidate(key, async () => {
+        // Re-run logic for trending: fetch latest pk from/about pages and recompute topics
+        const proto = String(req.headers['x-forwarded-proto'] || 'https')
+        const host = String(req.headers['x-forwarded-host'] || req.headers.host || 'localhost')
+        const base = `${proto}://${host}`
+        const fromReqUrl = `${base}/api/pk?scope=from&page=1`
+        const aboutReqUrl = `${base}/api/pk?scope=about&page=1`
+        const headers = { 'user-agent': 'tribune/trending/1.0' }
+        const [a, b] = await Promise.allSettled([
+          upstreamJson(fromReqUrl, headers),
+          upstreamJson(aboutReqUrl, headers),
+        ])
+        const fromRes = a.status === 'fulfilled' ? (a.value as any) : null
+        const aboutRes = b.status === 'fulfilled' ? (b.value as any) : null
+        const raws = [
+          ...(Array.isArray(fromRes?.items) ? fromRes!.items : []),
+          ...(Array.isArray(aboutRes?.items) ? aboutRes!.items : []),
+        ]
+        const normalized = raws.map((r: any) => normalize(r)).filter(Boolean)
+        const topics = scoreTopics(normalized).slice(0, limit)
+        return { items: topics, meta: { region, asOf: new Date().toISOString(), kind: 'topics' } }
+      })
       return res.status(200).json(fresh)
     }
 
@@ -197,8 +230,30 @@ export default async function handler(req: any, res: any) {
     const normalized = raws.map((r: any) => normalize(r)).filter(Boolean)
     // Build topics
     const topics = scoreTopics(normalized).slice(0, limit)
-    const payload = { region, asOf: new Date().toISOString(), topics }
+    const payload: any = { region, asOf: new Date().toISOString(), topics }
+    attachEntityMeta(payload)
     setCache(key, payload, 300, 3600)
+    maybeScheduleRevalidate(key, async () => {
+      const proto = String(req.headers['x-forwarded-proto'] || 'https')
+      const host = String(req.headers['x-forwarded-host'] || req.headers.host || 'localhost')
+      const base = `${proto}://${host}`
+      const fromReqUrl = `${base}/api/pk?scope=from&page=1`
+      const aboutReqUrl = `${base}/api/pk?scope=about&page=1`
+      const headers = { 'user-agent': 'tribune/trending/1.0' }
+      const [a, b] = await Promise.allSettled([
+        upstreamJson(fromReqUrl, headers),
+        upstreamJson(aboutReqUrl, headers),
+      ])
+      const fromRes = a.status === 'fulfilled' ? (a.value as any) : null
+      const aboutRes = b.status === 'fulfilled' ? (b.value as any) : null
+      const raws = [
+        ...(Array.isArray(fromRes?.items) ? fromRes!.items : []),
+        ...(Array.isArray(aboutRes?.items) ? aboutRes!.items : []),
+      ]
+      const normalized = raws.map((r: any) => normalize(r)).filter(Boolean)
+      const topics = scoreTopics(normalized).slice(0, limit)
+      return { items: topics, meta: { region, asOf: new Date().toISOString(), kind: 'topics' } }
+    })
     // Best-effort write to KV
     try {
       const mod: any = await import('@vercel/kv').catch(() => null)
@@ -209,6 +264,14 @@ export default async function handler(req: any, res: any) {
     } catch {}
     cache(res, 300, 60)
     await addCacheDebugHeaders(res, req)
+    const meta = extractEntityMeta(payload)
+    if (meta) {
+      if (isNotModified(req, meta)) {
+        applyEntityHeaders(res, meta)
+        return res.status(304).end()
+      }
+      applyEntityHeaders(res, meta)
+    }
     return res.status(200).json(payload)
   } catch (e: any) {
     // On failure: prefer serving stale from KV or in-memory cache.
@@ -270,3 +333,5 @@ export default async function handler(req: any, res: any) {
     return res.status(500).json({ error: 'Failed to compute trending topics' })
   }
 }
+
+export default withHttpMetrics(handler)

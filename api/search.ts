@@ -1,11 +1,14 @@
 import { normalize } from './_normalize.js'
 import { cors, cache, upstreamJson, addCacheDebugHeaders } from './_shared.js'
+import { withHttpMetrics } from './_httpMetrics.js'
 import { getFresh, getStale, setCache, getFreshOrL2 } from './_cache.js'
+import { maybeScheduleRevalidate } from './_revalidate.js'
 import { buildCacheKey } from './_key.js'
 import { getProvidersForWorld, tryProvidersSequential } from './_providers.js'
 import { getInFlight, setInFlight } from './_inflight.js'
+import { applyEntityHeaders, extractEntityMeta, isNotModified, attachEntityMeta } from './_http.js'
 
-export default async function handler(req: any, res: any) {
+export default withHttpMetrics(async function handler(req: any, res: any) {
   cors(res)
   if (req.method === 'OPTIONS') return res.status(204).end()
   // Minimal rate limiting: 30 req / 60s per IP
@@ -66,7 +69,35 @@ export default async function handler(req: any, res: any) {
         res.setHeader('X-Provider-Articles', String(fresh.items.length))
         if (!getFresh(cacheKey)) res.setHeader('X-Cache-L2', '1')
         cache(res, 300, 60)
+        const meta = extractEntityMeta(fresh)
+        if (meta) {
+          if (isNotModified(req, meta)) {
+            applyEntityHeaders(res, meta)
+            await addCacheDebugHeaders(res, req)
+            return res.status(304).end()
+          }
+          applyEntityHeaders(res, meta)
+        }
         await addCacheDebugHeaders(res, req)
+        maybeScheduleRevalidate(cacheKey, async () => {
+          const providers = getProvidersForWorld()
+          const result2 = await tryProvidersSequential(
+            providers,
+            'search',
+            { page: pageNum, pageSize: pageSizeNum, country, q, domains, from, to },
+            (url, headers) => upstreamJson(url, headers)
+          )
+          const normalized2 = result2.items.map(normalize).filter(Boolean)
+          return {
+            items: normalized2,
+            meta: {
+              provider: result2.provider,
+              attempts: result2.attempts || [result2.provider],
+              attemptsDetail: result2.attemptsDetail,
+            },
+          }
+        })
+        // meta handled above
         return res.status(200).json({ items: fresh.items })
       }
     }
@@ -93,18 +124,46 @@ export default async function handler(req: any, res: any) {
     res.setHeader('X-Provider-Attempts', result.attempts?.join(',') || result.provider)
     if (result.attemptsDetail)
       res.setHeader('X-Provider-Attempts-Detail', result.attemptsDetail.join(','))
-    setCache(cacheKey, {
+    const cachePayload: any = {
       items: normalized,
       meta: {
         provider: result.provider,
         attempts: result.attempts || [result.provider],
         attemptsDetail: result.attemptsDetail,
       },
+    }
+    attachEntityMeta(cachePayload)
+    setCache(cacheKey, cachePayload)
+    maybeScheduleRevalidate(cacheKey, async () => {
+      const providers = getProvidersForWorld()
+      const result2 = await tryProvidersSequential(
+        providers,
+        'search',
+        { page: pageNum, pageSize: pageSizeNum, country, q, domains, from, to },
+        (url, headers) => upstreamJson(url, headers)
+      )
+      const normalized2 = result2.items.map(normalize).filter(Boolean)
+      return {
+        items: normalized2,
+        meta: {
+          provider: result2.provider,
+          attempts: result2.attempts || [result2.provider],
+          attemptsDetail: result2.attemptsDetail,
+        },
+      }
     })
     res.setHeader('X-Provider-Articles', String(normalized.length))
     cache(res, 300, 60)
+    const entityMeta = extractEntityMeta(cachePayload)
     if (String(req.query.debug) === '1') {
       await addCacheDebugHeaders(res, req)
+      if (entityMeta) {
+        if (isNotModified(req, entityMeta)) {
+          applyEntityHeaders(res, entityMeta)
+          return res.status(304).end()
+        }
+        applyEntityHeaders(res, entityMeta)
+      }
       return res.status(200).json({
         items: normalized,
         debug: {
@@ -120,6 +179,13 @@ export default async function handler(req: any, res: any) {
       })
     }
     await addCacheDebugHeaders(res, req)
+    if (entityMeta) {
+      if (isNotModified(req, entityMeta)) {
+        applyEntityHeaders(res, entityMeta)
+        return res.status(304).end()
+      }
+      applyEntityHeaders(res, entityMeta)
+    }
     return res.status(200).json({ items: normalized })
   } catch (e: any) {
     const cacheKey = buildCacheKey('search', {
@@ -147,4 +213,4 @@ export default async function handler(req: any, res: any) {
       })
     return res.status(500).json({ error: 'Proxy failed' })
   }
-}
+})

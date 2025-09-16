@@ -1,5 +1,6 @@
 import { normalize } from '../../_normalize.js'
 import { cors, cache, addCacheDebugHeaders } from '../../_shared.js'
+import { withHttpMetrics } from '../../_httpMetrics.js'
 import {
   getFresh,
   getStale,
@@ -19,7 +20,7 @@ const slugify = (s = '') =>
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
 
-export default async function handler(req: any, res: any) {
+async function handler(req: any, res: any) {
   cors(res)
   if (req.method === 'OPTIONS') return res.status(204).end()
   const slug = slugify(req.query.slug || '')
@@ -305,3 +306,5 @@ export default async function handler(req: any, res: any) {
     return res.status(500).json({ error: 'Proxy failed' })
   }
 }
+
+export default withHttpMetrics(handler)

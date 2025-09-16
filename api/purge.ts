@@ -1,4 +1,5 @@
 import { purgeKey, purgePrefix } from './_cache.js'
+import { withHttpMetrics } from './_httpMetrics.js'
 
 // Simple protected purge endpoint.
 // Auth: header X-Admin-Token must equal process.env.ADMIN_PURGE_TOKEN
@@ -7,7 +8,7 @@ import { purgeKey, purgePrefix } from './_cache.js'
 //  /api/purge?prefix=somePrefix
 // Returns JSON { purged: number, mode: 'key'|'prefix' }
 // For safety, at least one of key or prefix must be supplied (key takes precedence).
-export default async function handler(req: any, res: any) {
+async function handler(req: any, res: any) {
   if (req.method && req.method !== 'GET') {
     res.statusCode = 405
     return res.end('Method Not Allowed')
@@ -38,3 +39,5 @@ export default async function handler(req: any, res: any) {
     return res.end('Error: ' + (e?.message || 'unknown'))
   }
 }
+
+export default withHttpMetrics(handler)

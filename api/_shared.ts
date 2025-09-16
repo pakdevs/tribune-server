@@ -58,6 +58,55 @@ export async function addCacheDebugHeaders(res: any, req?: any) {
       res.setHeader('X-L2-Promotions', String(stats.l2Promotions || 0))
       res.setHeader('X-L2-Hit-Ratio', l2HitRatio.toFixed(4))
     }
+    // Background revalidation metrics (optional best-effort import)
+    try {
+      const rmod: any = await import('./_revalidate.js')
+      if (rmod.bgRevalStats) {
+        const rstats = rmod.bgRevalStats()
+        res.setHeader('X-Reval-Scheduled', String(rstats.scheduled))
+        res.setHeader('X-Reval-Success', String(rstats.success))
+        res.setHeader('X-Reval-Fail', String(rstats.fail))
+        res.setHeader('X-Reval-Inflight', String(rstats.inflight))
+        res.setHeader('X-Reval-Skipped-Fresh', String(rstats.skippedFresh))
+        res.setHeader('X-Reval-Skipped-Recent', String(rstats.skippedRecent))
+        res.setHeader('X-Reval-Skipped-Inflight', String(rstats.skippedInflight))
+        res.setHeader('X-Reval-Skipped-MaxConc', String(rstats.skippedMaxConcurrent))
+        res.setHeader('X-Reval-Skipped-Negative', String(rstats.skippedNegative))
+        // Adaptive classification counters (if adaptive module active)
+        if (typeof rstats.adaptiveHot === 'number') {
+          res.setHeader('X-Reval-Adaptive-Hot', String(rstats.adaptiveHot))
+          res.setHeader('X-Reval-Adaptive-Cold', String(rstats.adaptiveCold))
+          res.setHeader('X-Reval-Adaptive-Baseline', String(rstats.adaptiveBaseline))
+          res.setHeader('X-Reval-Adaptive-Suppressed', String(rstats.adaptiveSuppressed))
+        }
+      }
+      // Prefetch stats (Phase 5)
+      try {
+        const pmod: any = await import('./_prefetch.js')
+        if (pmod.prefetchStats) {
+          const p = pmod.prefetchStats()
+          res.setHeader('X-Prefetch-Scheduled', String(p.prefetchScheduled))
+          res.setHeader('X-Prefetch-Success', String(p.prefetchSuccess))
+          res.setHeader('X-Prefetch-Fail', String(p.prefetchFail))
+          res.setHeader('X-Prefetch-Registry', String(p.registrySize))
+          res.setHeader('X-Prefetch-Skipped-Disabled', String(p.prefetchSkippedDisabled))
+          res.setHeader('X-Prefetch-Skipped-Suspended', String(p.prefetchSkippedSuspended))
+          res.setHeader('X-Prefetch-Skipped-Cooldown', String(p.prefetchSkippedCooldown))
+          res.setHeader('X-Prefetch-Skipped-NoHot', String(p.prefetchSkippedNoHot))
+          res.setHeader('X-Prefetch-Skipped-Throttled', String(p.prefetchSkippedThrottled))
+        }
+      } catch {}
+    } catch {}
+
+    // Entity headers exposure (if response already has them set earlier in flow)
+    try {
+      const etag = res.getHeader && res.getHeader('ETag')
+      const lm = res.getHeader && res.getHeader('Last-Modified')
+      if (etag) res.setHeader('X-Entity-ETag', String(etag))
+      if (lm) res.setHeader('X-Entity-LastModified', String(lm))
+      const mode = String(process.env.ETAG_MODE || 'weak')
+      res.setHeader('X-Entity-ETag-Mode', mode)
+    } catch {}
   } catch {}
 }
 
@@ -68,15 +117,40 @@ export async function upstreamJson(
 ) {
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
-  const r = await fetch(url, { headers, signal: controller.signal }).finally(() =>
+  const started = Date.now()
+  try {
+    const r = await fetch(url, { headers, signal: controller.signal })
+    const latency = Date.now() - started
+    try {
+      const m = await import('./_metrics.js')
+      if (!r.ok) {
+        // Differentiate timeout vs error later (timeout path in catch below)
+        m.recordUpstream('error', latency)
+      } else {
+        m.recordUpstream('ok', latency)
+      }
+    } catch {}
+    if (!r.ok) {
+      const err: any = new Error(`Upstream ${r.status}`)
+      err.status = r.status
+      const ra = r.headers.get('retry-after')
+      if (ra) err.retryAfter = ra
+      throw err
+    }
+    return r.json()
+  } catch (e: any) {
+    const latency = Date.now() - started
+    if (e?.name === 'AbortError') {
+      try {
+        const m = await import('./_metrics.js')
+        m.recordUpstream('timeout', latency)
+      } catch {}
+      const err: any = new Error('Upstream timeout')
+      err.status = 504
+      throw err
+    }
+    throw e
+  } finally {
     clearTimeout(timeoutId)
-  )
-  if (!r.ok) {
-    const err: any = new Error(`Upstream ${r.status}`)
-    err.status = r.status
-    const ra = r.headers.get('retry-after')
-    if (ra) err.retryAfter = ra
-    throw err
   }
-  return r.json()
 }

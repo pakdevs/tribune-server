@@ -1,4 +1,32 @@
 import { l2Set, l2Enabled } from './_l2.js'
+// Lazy adaptive import (optional)
+let __recordHit: null | ((k: string) => void) = null
+let __adaptiveStats: null | ((limit?: number) => any) = null
+let __prefetchTick: null | (() => Promise<void> | void) = null
+// eslint-disable-next-line @typescript-eslint/no-floating-promises
+import('./_adaptive.js')
+  .then((m: any) => {
+    if (typeof m.recordHit === 'function') __recordHit = m.recordHit
+    if (typeof m.adaptiveStats === 'function') __adaptiveStats = m.adaptiveStats
+  })
+  .catch(() => {})
+// Prefetch lazy import
+// eslint-disable-next-line @typescript-eslint/no-floating-promises
+import('./_prefetch.js')
+  .then((m: any) => {
+    if (typeof m.prefetchTick === 'function') __prefetchTick = m.prefetchTick
+  })
+  .catch(() => {})
+
+// Lazy reference to background revalidation stats (populated if module present)
+let __bgRevalStats: null | (() => any) = null
+// Fire-and-forget dynamic import; ignore failure (feature optional)
+// eslint-disable-next-line @typescript-eslint/no-floating-promises
+import('./_revalidate.js')
+  .then((m: any) => {
+    if (typeof m?.bgRevalStats === 'function') __bgRevalStats = m.bgRevalStats
+  })
+  .catch(() => {})
 
 type Entry = { data: any; expiresAt: number; staleUntil: number; negative?: boolean }
 
@@ -24,6 +52,8 @@ interface CacheMetrics {
   l2Misses: number
   l2Writes: number
   l2Promotions: number
+  metricsPushOk?: number
+  metricsPushFail?: number
 }
 
 // Doubly-linked list node for O(1) LRU updates
@@ -67,6 +97,8 @@ const metrics: CacheMetrics = {
   l2Misses: 0,
   l2Writes: 0,
   l2Promotions: 0,
+  metricsPushOk: 0,
+  metricsPushFail: 0,
 }
 
 // Read env once; fallback to previous defaults (90s fresh + 600s stale extra)
@@ -222,6 +254,9 @@ export function getFreshWithMetrics<T = any>(key: string): T | null {
   if (v !== null) {
     metrics.hitsFresh++
     touchLRU(key)
+    try {
+      __recordHit?.(key)
+    } catch {}
     metrics.totalLookups++
     maybeLog()
     return v
@@ -237,6 +272,9 @@ export function getStaleWithMetrics<T = any>(key: string): T | null {
   if (v !== null) {
     metrics.hitsStale++
     touchLRU(key)
+    try {
+      __recordHit?.(key)
+    } catch {}
     metrics.totalLookups++
     maybeLog()
     return v
@@ -306,6 +344,11 @@ function maybeLog() {
     // Structured single-line JSON for easy ingestion
     const l2Total = (metrics as any).l2Hits + (metrics as any).l2Misses
     const l2HitRatio = l2Total ? (metrics as any).l2Hits / l2Total : 0
+    const reval = __bgRevalStats ? __bgRevalStats() : null
+    // Opportunistic Phase 5 prefetch tick (fire-and-forget)
+    try {
+      __prefetchTick?.()
+    } catch {}
     console.log(
       JSON.stringify({
         level: 'info',
@@ -329,9 +372,77 @@ function maybeLog() {
           l2Writes: (metrics as any).l2Writes,
           l2Promotions: (metrics as any).l2Promotions,
           l2HitRatio: Number(l2HitRatio.toFixed(4)),
+          revalScheduled: reval ? reval.scheduled : undefined,
+          revalSuccess: reval ? reval.success : undefined,
+          revalFail: reval ? reval.fail : undefined,
+          revalInflight: reval ? reval.inflight : undefined,
+          adaptiveHot: reval ? reval.adaptiveHot : undefined,
+          adaptiveCold: reval ? reval.adaptiveCold : undefined,
+          adaptiveBaseline: reval ? reval.adaptiveBaseline : undefined,
+          adaptiveSuppressed: reval ? reval.adaptiveSuppressed : undefined,
+          metricsPushOk: (metrics as any).metricsPushOk,
+          metricsPushFail: (metrics as any).metricsPushFail,
+          metricsPushSuccessRatio: (() => {
+            const ok = (metrics as any).metricsPushOk || 0
+            const fail = (metrics as any).metricsPushFail || 0
+            const total = ok + fail
+            return total ? Number((ok / total).toFixed(4)) : 0
+          })(),
+          adaptiveHotSample: (() => {
+            try {
+              const s = __adaptiveStats?.(3)
+              if (!s || !s.hotSample) return undefined
+              return s.hotSample.map((k: any) => ({ key: k.key, emaHPM: k.emaHPM }))
+            } catch {
+              return undefined
+            }
+          })(),
         },
       })
     )
+    // Optional external push (fire-and-forget)
+    try {
+      const url = process.env.METRICS_PUSH_URL
+      if (url) {
+        const payload = {
+          ts: new Date().toISOString(),
+          cache: {
+            puts: metrics.puts,
+            hitsFresh: metrics.hitsFresh,
+            hitsStale: metrics.hitsStale,
+            misses: metrics.misses,
+            size: metrics.size,
+            capacity: metrics.capacity,
+            hitRatio: metrics.hitRatio,
+            l2: {
+              hits: (metrics as any).l2Hits,
+              misses: (metrics as any).l2Misses,
+              writes: (metrics as any).l2Writes,
+              promotions: (metrics as any).l2Promotions,
+            },
+            reval: reval || undefined,
+          },
+        }
+        // eslint-disable-next-line @typescript-eslint/no-floating-promises
+        fetch(url, {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            ...(process.env.METRICS_PUSH_TOKEN
+              ? { authorization: `Bearer ${process.env.METRICS_PUSH_TOKEN}` }
+              : {}),
+          },
+          body: JSON.stringify(payload),
+        })
+          .then((r) => {
+            if (r.ok) (metrics as any).metricsPushOk++
+            else (metrics as any).metricsPushFail++
+          })
+          .catch(() => {
+            ;(metrics as any).metricsPushFail++
+          })
+      }
+    } catch {}
     if (l2Total > 50 && l2HitRatio < 0.1) {
       console.log(
         JSON.stringify({

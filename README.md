@@ -82,6 +82,192 @@ Aliases accepted (mapped internally): `politics, world → general`, `tech → t
 - CORS: `*` (open). Adjust in `api/_shared.js` if you need to lock to your app domain.
 - Basic security headers added: `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options`, `Permissions-Policy`.
 
+### HTTP Entity Validation (Phase 6)
+
+Phase 6 introduces conditional GET to reduce bandwidth and latency when data has not changed.
+
+Implemented:
+
+- Weak ETag generation (hash of item count + newest publish timestamp + ordered ids)
+- Last-Modified (UTC of newest article `publishDate`)
+- Conditional evaluation order: `If-None-Match` (ETag) first, then `If-Modified-Since`
+- 304 responses on cache HIT when entity unchanged (skips body payload)
+- Metadata persisted alongside cached payload (`__etag`, `__lm`) so subsequent hits avoid recompute
+
+Headers now included on eligible responses:
+
+| Header        | Example                                                            | Notes                                                  |
+| ------------- | ------------------------------------------------------------------ | ------------------------------------------------------ |
+| ETag          | W/"ab12cd34"                                                       | Weak validator stable while item set & order unchanged |
+| Last-Modified | Tue, 16 Sep 2025 10:20 GMT                                         | Newest article timestamp (fallback: response time)     |
+| Cache-Control | public, max-age=30, stale-while-revalidate=60 (or existing policy) | CDN hints; unchanged from prior phases                 |
+
+Client usage example:
+
+```http
+GET /api/world HTTP/1.1
+If-None-Match: W/"ab12cd34"
+```
+
+If unchanged → `304 Not Modified` with ETag & Last-Modified only.
+
+Rationale:
+
+- Saves bandwidth for frequent refresh polling (mobile pull-to-refresh)
+- Aligns with CDN revalidation semantics (ETag assists surrogate caches)
+- Weak ETag avoids excessive recalculation while still preventing stale UIs
+
+Advanced configuration (heuristics):
+
+| Env Var                     | Default          | Mode(s) | Description                                                                                     |
+| --------------------------- | ---------------- | ------- | ----------------------------------------------------------------------------------------------- |
+| ETAG_MODE                   | weak             | both    | weak (W/ prefixed) or strong (content-sensitive)                                                |
+| ETAG_SORT                   | weak:0, strong:1 | both    | When 1, items sorted (publishDate desc then id) to make ETag invariant to ordering noise        |
+| ETAG_ID_SAMPLE              | (empty)          | both    | If set to integer N, only first N items contribute to id/title basis (caps cost on large feeds) |
+| ETAG_STRONG_INCLUDE_SUMMARY | 0                | strong  | When 1, include summary hash in strong ETag basis (higher sensitivity)                          |
+
+Strong mode basis parts: `id:timestamp:hash(title[:120])[:hash(summary[:200])]` (sampled & sorted if configured).
+
+Operational guidance:
+
+- Keep `ETAG_MODE=weak` for maximum 304 hit rates unless clients rely on rapid title edits.
+- Enable `ETAG_SORT=1` (already implicit in strong) if feeds can reorder frequently without semantic changes.
+- Use `ETAG_ID_SAMPLE` (e.g. 25) for large result sets to bound compute; may slightly under-detect tail changes.
+- `ETAG_STRONG_INCLUDE_SUMMARY=1` only if summaries are stable and important for cache validation (costlier + more churn risk).
+
+Future enhancements (not yet): per-field inclusion allowlist, partial diff endpoint, per-client validator negotiation.
+
+### Background Revalidation (Phase 4)
+
+Lightweight opportunistic background revalidation keeps hot keys fresh without adding latency to client responses.
+
+Mechanics:
+
+- When a request serves a cached HIT and the remaining fresh time `< BG_REVALIDATE_FRESH_THRESHOLD_MS`, the key is scheduled for refresh in the background (fire-and-forget).
+- Concurrency is capped by `BG_MAX_INFLIGHT`.
+- A per-key minimum interval (`BG_MIN_INTERVAL_MS`) prevents thrashing.
+- Negative cache entries are never revalidated in the background (skip counts tracked).
+- Metrics counters are exposed via `&debug=1` headers and periodic structured logs (`msg=cache-metrics`).
+
+Env variables (all optional, with defaults):
+
+| Var                              | Default | Purpose                                         |
+| -------------------------------- | ------- | ----------------------------------------------- |
+| ENABLE_BG_REVALIDATE             | 1       | Master switch                                   |
+| BG_REVALIDATE_FRESH_THRESHOLD_MS | 15000   | Schedule if fresh TTL remaining < threshold     |
+| BG_MAX_INFLIGHT                  | 3       | Max concurrent background refreshes             |
+| BG_MIN_INTERVAL_MS               | 10000   | Minimum ms between successful refreshes per key |
+
+Debug headers (when `debug=1`):
+
+| Header                      | Meaning                                         |
+| --------------------------- | ----------------------------------------------- |
+| X-Reval-Scheduled           | Total background refreshes scheduled            |
+| X-Reval-Success             | Successful refresh completions                  |
+| X-Reval-Fail                | Failed refresh attempts                         |
+| X-Reval-Inflight            | Currently in-flight background tasks            |
+| X-Reval-Skipped-Fresh       | Skipped because plenty of fresh time remains    |
+| X-Reval-Skipped-Recent      | Skipped due to per-key min interval not elapsed |
+| X-Reval-Skipped-Inflight    | Duplicate in-flight attempt suppressed          |
+| X-Reval-Skipped-MaxConc     | Skipped because global concurrency cap reached  |
+| X-Reval-Skipped-Negative    | Negative cache entries excluded                 |
+| X-Reval-Adaptive-Hot        | Number of times a key classified hot this run   |
+| X-Reval-Adaptive-Cold       | Number of cold classifications                  |
+| X-Reval-Adaptive-Baseline   | Number of baseline classifications              |
+| X-Reval-Adaptive-Suppressed | Scheduling suppressions (below min HPM)         |
+
+Structured log sample (every ~5m or 2000 lookups):
+
+```json
+{
+  "level": "info",
+  "msg": "cache-metrics",
+  "cache": {
+    "puts": 1234,
+    "hitsFresh": 1100,
+    "revalScheduled": 42,
+    "revalSuccess": 40,
+    "revalFail": 2,
+    "adaptiveHot": 8,
+    "adaptiveCold": 5,
+    "adaptiveBaseline": 20,
+    "adaptiveSuppressed": 12,
+    "metricsPushOk": 3,
+    "metricsPushFail": 0,
+    "metricsPushSuccessRatio": 1,
+    "adaptiveHotSample": [
+      { "key": "world|page=1", "emaHPM": 52.3 },
+      { "key": "pk|scope=about", "emaHPM": 37.1 }
+    ]
+  }
+}
+```
+
+Additional log fields:
+
+| Field                    | Meaning                                                           |
+| ------------------------ | ----------------------------------------------------------------- |
+| adaptiveHot / Cold / ... | Cumulative adaptive classification counters since cold start      |
+| metricsPushOk            | Successful external metrics POST attempts                         |
+| metricsPushFail          | Failed external metrics POST attempts                             |
+| metricsPushSuccessRatio  | ok / (ok + fail) (0 if no attempts yet)                           |
+| adaptiveHotSample        | Up to 3 hottest keys (key + EMA hits-per-minute) for quick triage |
+
+Interpretation Tips:
+
+- Adaptive Revalidation (Phase 4+ Enhancement)
+
+Adaptive mode tunes background refresh urgency per key based on recent hit frequency (EMA of hits-per-minute):
+
+Env Vars:
+
+| Var                          | Default | Description                                                  |
+| ---------------------------- | ------- | ------------------------------------------------------------ |
+| ADAPTIVE_REVAL_ENABLED       | 1       | Master switch for adaptive adjustments                       |
+| ADAPTIVE_MAX_KEYS            | 200     | Max tracked hot keys (older evicted)                         |
+| ADAPTIVE_EMA_ALPHA           | 0.2     | EMA smoothing factor (higher = more reactive)                |
+| ADAPTIVE_HOT_HPM             | 30      | HPM threshold to treat key as hot                            |
+| ADAPTIVE_COLD_HPM            | 2       | HPM threshold considered cold (below this reduces threshold) |
+| ADAPTIVE_HOT_FACTOR          | 2.0     | Multiplier applied to base threshold for hot keys            |
+| ADAPTIVE_COLD_FACTOR         | 0.5     | Multiplier for cold keys                                     |
+| ADAPTIVE_MIN_HPM_TO_SCHEDULE | 0.2     | Below this HPM, scheduling is suppressed                     |
+
+Endpoint: `GET /api/cacheMetrics` (returns cache, revalidation, adaptive samples). Protect with `METRICS_API_TOKEN` (Bearer) if set.
+
+External Push (optional):
+
+| Var                | Description                                                 |
+| ------------------ | ----------------------------------------------------------- |
+| METRICS_PUSH_URL   | HTTP(S) collector URL to POST periodic `cache-metrics` JSON |
+| METRICS_PUSH_TOKEN | Optional bearer token for push authorization                |
+
+Push payload sample:
+
+```json
+{
+  "ts": "2025-09-16T00:00:00.000Z",
+  "cache": {
+    "puts": 123,
+    "hitsFresh": 110,
+    "l2": { "hits": 20, "misses": 5 },
+    "reval": { "scheduled": 40 }
+  }
+}
+```
+
+Operational Guidelines:
+
+- Increase `ADAPTIVE_HOT_FACTOR` cautiously; high values can front-load upstream usage.
+- If many keys show low HPM and are suppressed, confirm clients aren’t churning random query params (key hygiene).
+- For bursty traffic, raise `ADAPTIVE_EMA_ALPHA` for quicker reaction; lower it for stability.
+- Monitor `revalScheduled` vs `revalSuccess` after tuning adaptive thresholds to ensure error rates don’t spike.
+
+- High `revalScheduled` with low `revalSuccess` → increase `BG_MIN_INTERVAL_MS` or investigate upstream errors.
+- Many `skippedMaxConcurrent` → raise `BG_MAX_INFLIGHT` cautiously (consider upstream rate limits).
+- Large `skippedFresh` relative to hits → threshold too high; lower `BG_REVALIDATE_FRESH_THRESHOLD_MS` for earlier refresh.
+- If `revalFail` spikes, rely on stale window while debugging upstream provider health.
+- Track `metricsPushOk` vs `metricsPushFail` (in `/api/cacheMetrics` response under `push`) to ensure external collector is healthy.
+
 ## Local Development
 
 Minimal (no build step):
@@ -128,6 +314,15 @@ Notes:
 - Durable provider usage metrics (Redis / KV).
 - On-demand media metadata endpoint (aspect ratio, blurhash).
 - Rate limiting (middleware).
+- Phase 5 (planned / now implementing): Adaptive Prefetch & Warming
+  - Use small rolling sample of hottest keys (adaptive EMA) to proactively refresh just before they go stale.
+  - Lightweight prefetch module maintains registry of last known fetchers per key (populated when background revalidation runs).
+  - Periodic opportunistic tick (piggybacks on existing cache-metrics log cadence or explicit endpoint) evaluates keys:
+    - If key fresh window remaining < PREFETCH_FRESH_THRESHOLD_MS (lower than normal revalidation threshold) AND not already scheduled, enqueue a prefetch.
+    - Limits: PREFETCH_MAX_BATCH (default 3), PREFETCH_MIN_INTERVAL_MS per key, PREFETCH_GLOBAL_COOLDOWN_MS between ticks.
+  - Goals: reduce user-perceived latency for hottest keys after inactivity bursts; smooth upstream usage.
+  - Metrics: prefetchScheduled / prefetchSuccess / prefetchFail / prefetchSkipped\* (reasons).
+  - Fail-safe: if upstream errors exceed PREFETCH_ERROR_BURST (e.g., >3 fails in last window) suspend prefetch for a cooldown.
 
 ### Observability (Phase 1 Implemented)
 

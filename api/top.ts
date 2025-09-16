@@ -1,6 +1,8 @@
 import { normalize } from './_normalize.js'
 import { cors, cache, upstreamJson, addCacheDebugHeaders } from './_shared.js'
+import { withHttpMetrics } from './_httpMetrics.js'
 import { getFresh, getStale, setCache, getFreshOrL2 } from './_cache.js'
+import { maybeScheduleRevalidate } from './_revalidate.js'
 import { buildCacheKey } from './_key.js'
 import { getProvidersForWorld, tryProvidersSequential } from './_providers.js'
 import { getInFlight, setInFlight } from './_inflight.js'
@@ -22,7 +24,7 @@ const allowed = new Set([
   'technology',
 ])
 
-export default async function handler(req: any, res: any) {
+async function handler(req: any, res: any) {
   cors(res)
   if (req.method === 'OPTIONS') return res.status(204).end()
   // Minimal rate limiting: 60 req / 60s per IP
@@ -70,6 +72,24 @@ export default async function handler(req: any, res: any) {
         if (!getFresh(cacheKey)) res.setHeader('X-Cache-L2', '1')
         cache(res, 300, 60)
         await addCacheDebugHeaders(res, req)
+        maybeScheduleRevalidate(cacheKey, async () => {
+          const providers = getProvidersForWorld()
+          const result2 = await tryProvidersSequential(
+            providers,
+            'top',
+            { page: pageNum, pageSize: pageSizeNum, country, category },
+            (url, headers) => upstreamJson(url, headers)
+          )
+          const normalized2 = result2.items.map(normalize).filter(Boolean)
+          return {
+            items: normalized2,
+            meta: {
+              provider: result2.provider,
+              attempts: result2.attempts || [result2.provider],
+              attemptsDetail: result2.attemptsDetail,
+            },
+          }
+        })
         return res.status(200).json({ items: fresh.items })
       }
     }
@@ -101,6 +121,24 @@ export default async function handler(req: any, res: any) {
         attempts: result.attempts || [result.provider],
         attemptsDetail: result.attemptsDetail,
       },
+    })
+    maybeScheduleRevalidate(cacheKey, async () => {
+      const providers = getProvidersForWorld()
+      const result2 = await tryProvidersSequential(
+        providers,
+        'top',
+        { page: pageNum, pageSize: pageSizeNum, country, category },
+        (url, headers) => upstreamJson(url, headers)
+      )
+      const normalized2 = result2.items.map(normalize).filter(Boolean)
+      return {
+        items: normalized2,
+        meta: {
+          provider: result2.provider,
+          attempts: result2.attempts || [result2.provider],
+          attemptsDetail: result2.attemptsDetail,
+        },
+      }
     })
     res.setHeader('X-Provider-Articles', String(normalized.length))
     cache(res, 300, 60)
@@ -153,3 +191,5 @@ export default async function handler(req: any, res: any) {
     return res.status(500).json({ error: 'Proxy failed' })
   }
 }
+
+export default withHttpMetrics(handler)

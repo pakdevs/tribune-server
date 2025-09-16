@@ -2,12 +2,15 @@ import { normalize } from './_normalize.js'
 import { dedupeByTitle } from './_dedupe.js'
 import { cors, cache, upstreamJson, addCacheDebugHeaders } from './_shared.js'
 import { getFresh, getStale, setCache, getFreshOrL2 } from './_cache.js'
+import { maybeScheduleRevalidate } from './_revalidate.js'
 import { buildCacheKey } from './_key.js'
 import { getProvidersForPK, tryProvidersSequential } from './_providers.js'
 import { getUsedToday } from './_budget.js'
 import { getInFlight, setInFlight } from './_inflight.js'
+import { applyEntityHeaders, extractEntityMeta, isNotModified, attachEntityMeta } from './_http.js'
+import { withHttpMetrics } from './_httpMetrics.js'
 
-export default async function handler(req: any, res: any) {
+export default withHttpMetrics(async function handler(req: any, res: any) {
   cors(res)
   if (req.method === 'OPTIONS') return res.status(204).end()
   // Minimal rate limiting: 60 req / 60s per IP
@@ -75,7 +78,130 @@ export default async function handler(req: any, res: any) {
         res.setHeader('X-Provider-Articles', String(fresh.items.length))
         if (!getFresh(cacheKey)) res.setHeader('X-Cache-L2', '1')
         cache(res, 300, 60)
+        // Apply entity headers before debug header export
+        const meta = extractEntityMeta(fresh)
+        if (meta) {
+          if (isNotModified(req, meta)) {
+            applyEntityHeaders(res, meta)
+            await addCacheDebugHeaders(res, req)
+            return res.status(304).end()
+          }
+          applyEntityHeaders(res, meta)
+        }
         await addCacheDebugHeaders(res, req)
+        // Opportunistic background revalidation
+        maybeScheduleRevalidate(cacheKey, async () => {
+          const providers = getProvidersForPK()
+          const enforcedQ =
+            scope === 'from' ? [q, 'site.country:PK'].filter(Boolean).join(' AND ') : q
+          const result2 = await tryProvidersSequential(
+            providers,
+            'top',
+            {
+              page: pageNum,
+              pageSize: pageSizeNum,
+              country,
+              domains,
+              sources,
+              q: enforcedQ,
+              pinQ: scope === 'from',
+              pageToken,
+            },
+            (url, headers) => upstreamJson(url, headers)
+          )
+          let normalized2 = result2.items.map(normalize).filter(Boolean)
+          function getTld(host = '') {
+            const h = String(host || '').toLowerCase()
+            const parts = h.split('.')
+            return parts.length >= 2 ? parts.slice(-1)[0] : ''
+          }
+          function inferSourceCountryFromDomain(host = ''): string | undefined {
+            const h = String(host || '')
+              .toLowerCase()
+              .replace(/^www\./, '')
+            const tld = getTld(h)
+            if (tld === 'pk') return 'PK'
+            const knownPK = new Set(['brecorder.com', 'thefridaytimes.com'])
+            if (knownPK.has(h)) return 'PK'
+            return undefined
+          }
+          function detectCountriesFromText(title = '', summary = ''): string[] {
+            const text = `${title} ${summary}`.toLowerCase()
+            const hits = new Set<string>()
+            const pkTerms = [
+              'pakistan',
+              'pakistani',
+              'islamabad',
+              'lahore',
+              'karachi',
+              'peshawar',
+              'rawalpindi',
+              'balochistan',
+              'sindh',
+              'punjab',
+              'kpk',
+              'gilgit-baltistan',
+              'azad kashmir',
+              'pak rupee',
+              'pak govt',
+            ]
+            for (const term of pkTerms) {
+              if (text.includes(term)) hits.add('PK')
+            }
+            return Array.from(hits)
+          }
+          function ensureFlags(n: any) {
+            if (typeof n.isFromPK !== 'boolean') {
+              const host = String(n.sourceDomain || '')
+              const country2 = inferSourceCountryFromDomain(host)
+              n.sourceCountry = country2
+              n.isFromPK = country2 === 'PK'
+            }
+            if (!Array.isArray(n.mentionsCountries) || typeof n.isAboutPK !== 'boolean') {
+              const arr = detectCountriesFromText(n.title || '', n.summary || '')
+              n.mentionsCountries = arr
+              n.isAboutPK = arr.includes('PK')
+            }
+            return n
+          }
+          function rank(items: any[]) {
+            const now = Date.now()
+            const score = (it: any) => {
+              const t = Date.parse(it.publishDate || it.publishedAt || '') || now
+              const recency = 1 / Math.max(1, now - t)
+              const aboutBoost = scope === 'about' && it.isAboutPK && !it.isFromPK ? 1.1 : 1
+              return recency * aboutBoost
+            }
+            return items.slice().sort((a, b) => score(b) - score(a))
+          }
+          function dedupe(items: any[]) {
+            const seen = new Set<string>()
+            return items.filter((it) => {
+              const key = String(it.url || it.link || it.id || '').toLowerCase()
+              if (!key) return true
+              if (seen.has(key)) return false
+              seen.add(key)
+              return true
+            })
+          }
+          normalized2 = normalized2.map(ensureFlags)
+          if (scope === 'from') normalized2 = normalized2.filter((n: any) => n.isFromPK)
+          else if (scope === 'about') normalized2 = normalized2.filter((n: any) => n.isAboutPK)
+          normalized2 = dedupe(rank(normalized2))
+          if (String(process.env.FEATURE_TITLE_DEDUPE || '1') === '1') {
+            const { dedupeByTitle } = await import('./_dedupe.js')
+            normalized2 = dedupeByTitle(normalized2, 0.9)
+          }
+          return {
+            items: normalized2,
+            meta: {
+              provider: result2.provider,
+              attempts: result2.attempts || [result2.provider],
+              attemptsDetail: result2.attemptsDetail,
+            },
+          }
+        })
+        // meta handled above
         return res.status(200).json({ items: fresh.items })
       }
     }
@@ -230,17 +356,138 @@ export default async function handler(req: any, res: any) {
     try {
       res.setHeader('X-Webz-Used-Today', String(getUsedToday('webz')))
     } catch {}
-    setCache(cacheKey, {
+    const cachePayload: any = {
       items: normalized,
       meta: {
         provider: result.provider,
         attempts: result.attempts || [result.provider],
         attemptsDetail: result.attemptsDetail,
       },
+    }
+    attachEntityMeta(cachePayload)
+    setCache(cacheKey, cachePayload)
+    // Schedule background revalidation for subsequent near-expiry windows
+    maybeScheduleRevalidate(cacheKey, async () => {
+      const providers = getProvidersForPK()
+      const enforcedQ = scope === 'from' ? [q, 'site.country:PK'].filter(Boolean).join(' AND ') : q
+      const result2 = await tryProvidersSequential(
+        providers,
+        'top',
+        {
+          page: pageNum,
+          pageSize: pageSizeNum,
+          country,
+          domains,
+          sources,
+          q: enforcedQ,
+          pinQ: scope === 'from',
+          pageToken,
+        },
+        (url, headers) => upstreamJson(url, headers)
+      )
+      let normalized2 = result2.items.map(normalize).filter(Boolean)
+      function getTld(host = '') {
+        const h = String(host || '').toLowerCase()
+        const parts = h.split('.')
+        return parts.length >= 2 ? parts.slice(-1)[0] : ''
+      }
+      function inferSourceCountryFromDomain(host = ''): string | undefined {
+        const h = String(host || '')
+          .toLowerCase()
+          .replace(/^www\./, '')
+        const tld = getTld(h)
+        if (tld === 'pk') return 'PK'
+        const knownPK = new Set(['brecorder.com', 'thefridaytimes.com'])
+        if (knownPK.has(h)) return 'PK'
+        return undefined
+      }
+      function detectCountriesFromText(title = '', summary = ''): string[] {
+        const text = `${title} ${summary}`.toLowerCase()
+        const hits = new Set<string>()
+        const pkTerms = [
+          'pakistan',
+          'pakistani',
+          'islamabad',
+          'lahore',
+          'karachi',
+          'peshawar',
+          'rawalpindi',
+          'balochistan',
+          'sindh',
+          'punjab',
+          'kpk',
+          'gilgit-baltistan',
+          'azad kashmir',
+          'pak rupee',
+          'pak govt',
+        ]
+        for (const term of pkTerms) {
+          if (text.includes(term)) hits.add('PK')
+        }
+        return Array.from(hits)
+      }
+      function ensureFlags(n: any) {
+        if (typeof n.isFromPK !== 'boolean') {
+          const host = String(n.sourceDomain || '')
+          const country2 = inferSourceCountryFromDomain(host)
+          n.sourceCountry = country2
+          n.isFromPK = country2 === 'PK'
+        }
+        if (!Array.isArray(n.mentionsCountries) || typeof n.isAboutPK !== 'boolean') {
+          const arr = detectCountriesFromText(n.title || '', n.summary || '')
+          n.mentionsCountries = arr
+          n.isAboutPK = arr.includes('PK')
+        }
+        return n
+      }
+      function rank(items: any[]) {
+        const now = Date.now()
+        const score = (it: any) => {
+          const t = Date.parse(it.publishDate || it.publishedAt || '') || now
+          const recency = 1 / Math.max(1, now - t)
+          const aboutBoost = scope === 'about' && it.isAboutPK && !it.isFromPK ? 1.1 : 1
+          return recency * aboutBoost
+        }
+        return items.slice().sort((a, b) => score(b) - score(a))
+      }
+      function dedupe(items: any[]) {
+        const seen = new Set<string>()
+        return items.filter((it) => {
+          const key = String(it.url || it.link || it.id || '').toLowerCase()
+          if (!key) return true
+          if (seen.has(key)) return false
+          seen.add(key)
+          return true
+        })
+      }
+      normalized2 = normalized2.map(ensureFlags)
+      if (scope === 'from') normalized2 = normalized2.filter((n: any) => n.isFromPK)
+      else if (scope === 'about') normalized2 = normalized2.filter((n: any) => n.isAboutPK)
+      normalized2 = dedupe(rank(normalized2))
+      if (String(process.env.FEATURE_TITLE_DEDUPE || '1') === '1') {
+        const { dedupeByTitle } = await import('./_dedupe.js')
+        normalized2 = dedupeByTitle(normalized2, 0.9)
+      }
+      return {
+        items: normalized2,
+        meta: {
+          provider: result2.provider,
+          attempts: result2.attempts || [result2.provider],
+          attemptsDetail: result2.attemptsDetail,
+        },
+      }
     })
     cache(res, 300, 60)
+    const entityMeta = extractEntityMeta(cachePayload)
     if (String(req.query.debug) === '1') {
       await addCacheDebugHeaders(res, req)
+      if (entityMeta) {
+        if (isNotModified(req, entityMeta)) {
+          applyEntityHeaders(res, entityMeta)
+          return res.status(304).end()
+        }
+        applyEntityHeaders(res, entityMeta)
+      }
       const effectiveQ = scope === 'from' ? [q, 'site.country:PK'].filter(Boolean).join(' AND ') : q
       return res.status(200).json({
         items: normalized,
@@ -259,6 +506,13 @@ export default async function handler(req: any, res: any) {
       })
     }
     await addCacheDebugHeaders(res, req)
+    if (entityMeta) {
+      if (isNotModified(req, entityMeta)) {
+        applyEntityHeaders(res, entityMeta)
+        return res.status(304).end()
+      }
+      applyEntityHeaders(res, entityMeta)
+    }
     return res.status(200).json({ items: normalized })
   } catch (e: any) {
     const page = String(req.query.page || '1')
@@ -295,4 +549,4 @@ export default async function handler(req: any, res: any) {
     }
     return res.status(500).json({ error: 'Proxy failed' })
   }
-}
+})

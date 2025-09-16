@@ -1,5 +1,6 @@
 import { normalize } from '../../_normalize.js'
 import { cors, cache, upstreamJson, addCacheDebugHeaders } from '../../_shared.js'
+import { withHttpMetrics } from '../../_httpMetrics.js'
 import {
   getFresh,
   getStale,
@@ -11,7 +12,7 @@ import {
 import { buildCacheKey } from '../../_key.js'
 import { getProvidersForPK, tryProvidersSequential } from '../../_providers.js'
 
-export default async function handler(req: any, res: any) {
+async function handler(req: any, res: any) {
   cors(res)
   if (req.method === 'OPTIONS') return res.status(204).end()
   const rawSlug = String(req.query.slug || '').toLowerCase()
@@ -155,3 +156,5 @@ export default async function handler(req: any, res: any) {
     return res.status(500).json({ error: 'Proxy failed' })
   }
 }
+
+export default withHttpMetrics(handler)

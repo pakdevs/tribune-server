@@ -1,12 +1,15 @@
 import { normalize } from './_normalize.js'
 import { cors, cache, upstreamJson, addCacheDebugHeaders } from './_shared.js'
 import { getFresh, getStale, setCache, getFreshOrL2 } from './_cache.js'
+import { maybeScheduleRevalidate } from './_revalidate.js'
 import { buildCacheKey } from './_key.js'
 import { getProvidersForWorld, tryProvidersSequential } from './_providers.js'
 import { getUsedToday } from './_budget.js'
 import { getInFlight, setInFlight } from './_inflight.js'
+import { applyEntityHeaders, extractEntityMeta, isNotModified, attachEntityMeta } from './_http.js'
+import { withHttpMetrics } from './_httpMetrics.js'
 
-export default async function handler(req: any, res: any) {
+export default withHttpMetrics(async function handler(req: any, res: any) {
   cors(res)
   if (req.method === 'OPTIONS') return res.status(204).end()
   // Minimal rate limiting: 60 req / 60s per IP
@@ -73,13 +76,55 @@ export default async function handler(req: any, res: any) {
         res.setHeader('X-Provider-Articles', String(fresh.items.length))
         if (!getFresh(cacheKey)) res.setHeader('X-Cache-L2', '1')
         cache(res, 600, 120)
+        // Ensure entity headers applied before debug header export
+        const meta = extractEntityMeta(fresh) || null
+        if (meta) {
+          if (isNotModified(req, meta)) {
+            applyEntityHeaders(res, meta)
+            await addCacheDebugHeaders(res, req)
+            return res.status(304).end()
+          }
+          applyEntityHeaders(res, meta)
+        }
         await addCacheDebugHeaders(res, req)
+        // Opportunistic background revalidation if nearing expiry
+        maybeScheduleRevalidate(cacheKey, async () => {
+          const providers = getProvidersForWorld()
+          const result = await tryProvidersSequential(
+            providers,
+            'top',
+            { page: pageNum, pageSize: pageSizeNum, country, domains, sources, q, pageToken },
+            (url, headers) => upstreamJson(url, headers)
+          )
+          let normalized = result.items.map(normalize).filter(Boolean)
+          if (domains.length) {
+            const allowed = new Set(
+              domains.map((d) =>
+                String(d)
+                  .toLowerCase()
+                  .replace(/^www\./, '')
+              )
+            )
+            normalized = normalized.filter((n) => {
+              const host = String(n.sourceDomain || '')
+                .toLowerCase()
+                .replace(/^www\./, '')
+              return allowed.has(host)
+            })
+          }
+          return {
+            items: normalized,
+            meta: {
+              provider: result.provider,
+              attempts: result.attempts || [result.provider],
+              attemptsDetail: result.attemptsDetail,
+            },
+          }
+        })
         return res.status(200).json({ items: fresh.items })
       }
     }
-    // Miss path: attempt providers with in-flight dedupe
     res.setHeader('X-Cache', 'MISS')
-    // Use Webz-only providers
     const providers = getProvidersForWorld()
     const flightKey = `world:${country}:${String(pageNum)}:${String(pageSizeNum)}:pt:${
       pageToken || ''
@@ -98,7 +143,6 @@ export default async function handler(req: any, res: any) {
     }
     const result = await flight
     let normalized = result.items.map(normalize).filter(Boolean)
-    // Enforce domain allowlist if caller requested specific domains
     if (domains.length) {
       const allowed = new Set(
         domains.map((d) =>
@@ -131,17 +175,60 @@ export default async function handler(req: any, res: any) {
     try {
       res.setHeader('X-Webz-Used-Today', String(getUsedToday('webz')))
     } catch {}
-    setCache(cacheKey, {
+    const cachePayload: any = {
       items: normalized,
       meta: {
         provider: result.provider,
         attempts: result.attempts || [result.provider],
         attemptsDetail: result.attemptsDetail,
       },
+    }
+    attachEntityMeta(cachePayload)
+    setCache(cacheKey, cachePayload)
+    maybeScheduleRevalidate(cacheKey, async () => {
+      const providers2 = getProvidersForWorld()
+      const result2 = await tryProvidersSequential(
+        providers2,
+        'top',
+        { page: pageNum, pageSize: pageSizeNum, country, domains, sources, q, pageToken },
+        (url, headers) => upstreamJson(url, headers)
+      )
+      let normalized2 = result2.items.map(normalize).filter(Boolean)
+      if (domains.length) {
+        const allowed2 = new Set(
+          domains.map((d) =>
+            String(d)
+              .toLowerCase()
+              .replace(/^www\./, '')
+          )
+        )
+        normalized2 = normalized2.filter((n) => {
+          const host2 = String(n.sourceDomain || '')
+            .toLowerCase()
+            .replace(/^www\./, '')
+          return allowed2.has(host2)
+        })
+      }
+      return {
+        items: normalized2,
+        meta: {
+          provider: result2.provider,
+          attempts: result2.attempts || [result2.provider],
+          attemptsDetail: result2.attemptsDetail,
+        },
+      }
     })
     cache(res, 600, 120)
+    const entityMeta = extractEntityMeta(cachePayload)
     if (String(req.query.debug) === '1') {
       await addCacheDebugHeaders(res, req)
+      if (entityMeta) {
+        if (isNotModified(req, entityMeta)) {
+          applyEntityHeaders(res, entityMeta)
+          return res.status(304).end()
+        }
+        applyEntityHeaders(res, entityMeta)
+      }
       return res.status(200).json({
         items: normalized,
         debug: {
@@ -160,6 +247,13 @@ export default async function handler(req: any, res: any) {
       })
     }
     await addCacheDebugHeaders(res, req)
+    if (entityMeta) {
+      if (isNotModified(req, entityMeta)) {
+        applyEntityHeaders(res, entityMeta)
+        return res.status(304).end()
+      }
+      applyEntityHeaders(res, entityMeta)
+    }
     return res.status(200).json({ items: normalized })
   } catch (e: any) {
     const country = String(req.query.country || 'us')
@@ -208,4 +302,4 @@ export default async function handler(req: any, res: any) {
     }
     return res.status(500).json({ error: 'Proxy failed' })
   }
-}
+})
