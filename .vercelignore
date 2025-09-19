@@ -1,0 +1,7 @@
+# Exclude deprecated endpoints and helper modules from deployment
+api/_*.ts
+api/**/_*.ts
+api/top.ts
+api/stats.ts
+api/category/**
+api/feeds/**

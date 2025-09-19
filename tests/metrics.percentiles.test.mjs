@@ -1,5 +1,5 @@
 import assert from 'assert'
-import { summarizeRollups, __test_only_injectHour } from '../api/_rollup.js'
+import { summarizeRollups, __test_only_injectHour } from '../lib/_rollup.js'
 
 function makeHist(counts) {
   return {

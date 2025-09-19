@@ -1,6 +1,6 @@
-import { normalize } from '../../_normalize.js'
-import { cors, cache, addCacheDebugHeaders } from '../../_shared.js'
-import { withHttpMetrics } from '../../_httpMetrics.js'
+import { normalize } from '../../../lib/_normalize.js'
+import { cors, cache, addCacheDebugHeaders } from '../../../lib/_shared.js'
+import { withHttpMetrics } from '../../../lib/_httpMetrics.js'
 import {
   getFresh,
   getStale,
@@ -8,11 +8,11 @@ import {
   setNegativeCache,
   getAny,
   getFreshOrL2,
-} from '../../_cache.js'
-import { buildCacheKey } from '../../_key.js'
-import { getProvidersForPK, buildProviderRequest } from '../../_providers.js'
-import { getSourceDomains } from '../../_sourceDomains.js'
-import { getInFlight, setInFlight } from '../../_inflight.js'
+} from '../../../lib/_cache.js'
+import { buildCacheKey } from '../../../lib/_key.js'
+import { getProvidersForPK, buildProviderRequest } from '../../../lib/_providers.js'
+import { getSourceDomains } from '../../../lib/_sourceDomains.js'
+import { getInFlight, setInFlight } from '../../../lib/_inflight.js'
 
 const slugify = (s = '') =>
   String(s || '')

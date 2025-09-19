@@ -1,6 +1,6 @@
-import { cors } from '../_shared.js'
-import { getRollups, summarizeRollups } from '../_rollup.js'
-import { withHttpMetrics } from '../_httpMetrics.js'
+import { cors } from '../../lib/_shared.js'
+import { getRollups, summarizeRollups } from '../../lib/_rollup.js'
+import { withHttpMetrics } from '../../lib/_httpMetrics.js'
 
 async function handler(req: any, res: any) {
   cors(res)

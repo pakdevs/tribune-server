@@ -1,5 +1,5 @@
-import { cors } from './_shared.js'
-import { withHttpMetrics } from './_httpMetrics.js'
+import { cors } from '../lib/_shared.js'
+import { withHttpMetrics } from '../lib/_httpMetrics.js'
 
 async function handler(req: any, res: any) {
   cors(res)
@@ -10,14 +10,14 @@ async function handler(req: any, res: any) {
       const auth = String(req.headers.authorization || '')
       if (auth !== `Bearer ${token}`) return res.status(401).json({ error: 'unauthorized' })
     }
-    const cacheMod: any = await import('./_cache.js')
-    const revalMod: any = await import('./_revalidate.js').catch(() => ({}))
-    const adaptiveMod: any = await import('./_adaptive.js').catch(() => ({}))
-    const breakerMod: any = await import('./_breaker.js').catch(() => ({}))
-    const budgetMod: any = await import('./_budget.js').catch(() => ({}))
+    const cacheMod: any = await import('../lib/_cache.js')
+    const revalMod: any = await import('../lib/_revalidate.js').catch(() => ({}))
+    const adaptiveMod: any = await import('../lib/_adaptive.js').catch(() => ({}))
+    const breakerMod: any = await import('../lib/_breaker.js').catch(() => ({}))
+    const budgetMod: any = await import('../lib/_budget.js').catch(() => ({}))
     const stats = cacheMod.cacheStats?.()
     const reval = revalMod.bgRevalStats ? revalMod.bgRevalStats() : null
-    const prefetchMod: any = await import('./_prefetch.js').catch(() => ({}))
+    const prefetchMod: any = await import('../lib/_prefetch.js').catch(() => ({}))
     const prefetch = prefetchMod.prefetchStats ? prefetchMod.prefetchStats() : null
     const adaptive = adaptiveMod.adaptiveStats ? adaptiveMod.adaptiveStats(20) : null
     const breaker = breakerMod.getBreakerSnapshot ? breakerMod.getBreakerSnapshot() : null

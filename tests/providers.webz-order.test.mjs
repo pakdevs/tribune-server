@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { tryProvidersSequential } from '../api/_providers.ts'
+import { tryProvidersSequential } from '../lib/_providers.ts'
 
 // This test checks that when domains/sources filters are present,
 // the provider ordering prefers Webz and the query includes site: and site_type:news.

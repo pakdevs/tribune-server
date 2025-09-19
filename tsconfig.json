@@ -12,6 +12,6 @@
     "rootDir": ".",
     "resolveJsonModule": true
   },
-  "include": ["api/**/*.ts", "tests/**/*.mjs", "types/**/*.d.ts"],
+  "include": ["api/**/*.ts", "lib/**/*.ts", "tests/**/*.mjs", "types/**/*.d.ts"],
   "exclude": ["node_modules", "dist"]
 }

@@ -1,5 +1,5 @@
-import { purgeKey, purgePrefix } from './_cache.js'
-import { withHttpMetrics } from './_httpMetrics.js'
+import { purgeKey, purgePrefix } from '../lib/_cache.js'
+import { withHttpMetrics } from '../lib/_httpMetrics.js'
 
 // Simple protected purge endpoint.
 // Auth: header X-Admin-Token must equal process.env.ADMIN_PURGE_TOKEN

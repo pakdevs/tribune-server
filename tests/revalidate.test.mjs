@@ -4,8 +4,8 @@ import assert from 'assert'
 export async function test() {
   process.env.ENABLE_BG_REVALIDATE = '1'
   process.env.BG_REVALIDATE_FRESH_THRESHOLD_MS = '999999' // force immediate scheduling
-  const { setCache, getFresh } = await import('../api/_cache.js')
-  const { maybeScheduleRevalidate, __resetBgRevalidate } = await import('../api/_revalidate.ts')
+  const { setCache, getFresh } = await import('../lib/_cache.js')
+  const { maybeScheduleRevalidate, __resetBgRevalidate } = await import('../lib/_revalidate.ts')
   __resetBgRevalidate()
   const key = 'reval:test'
   setCache(key, { items: [{ v: 1 }], meta: { provider: 'x', attempts: ['x'] } }, 1, 10)

@@ -3,7 +3,7 @@ import assert from 'assert'
 export async function test() {
   process.env.ETAG_MODE = 'weak'
   process.env.ETAG_SORT = '1'
-  const { buildEntityMetadata } = await import('../api/_http.js')
+  const { buildEntityMetadata } = await import('../lib/_http.js')
   const baseItems = [
     { id: 'a', publishDate: '2025-09-16T10:00:00Z', title: 'First' },
     { id: 'b', publishDate: '2025-09-16T09:00:00Z', title: 'Second' },

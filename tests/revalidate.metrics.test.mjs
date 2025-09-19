@@ -7,9 +7,9 @@ export async function test() {
   process.env.BG_REVALIDATE_FRESH_THRESHOLD_MS = '120000' // large so fresh TTL (90s) remains below threshold and not skipped as fresh
   process.env.BG_MIN_INTERVAL_MS = '10000'
   process.env.BG_MAX_INFLIGHT = '2'
-  const { setCache } = await import('../api/_cache.js')
+  const { setCache } = await import('../lib/_cache.js')
   const { maybeScheduleRevalidate, __resetBgRevalidate, bgRevalStats } = await import(
-    '../api/_revalidate.ts'
+    '../lib/_revalidate.ts'
   )
   __resetBgRevalidate()
   const key = 'reval:metrics'
@@ -49,7 +49,7 @@ export async function test() {
     maybeScheduleRevalidate: msr2,
     bgRevalStats: stats2,
     __resetBgRevalidate: reset2,
-  } = await import('../api/_revalidate.ts')
+  } = await import('../lib/_revalidate.ts')
   reset2()
   setCache('k1', { items: [{ v: 1 }], meta: { provider: 'a', attempts: ['a'] } }, 1, 5)
   setCache('k2', { items: [{ v: 1 }], meta: { provider: 'a', attempts: ['a'] } }, 1, 5)

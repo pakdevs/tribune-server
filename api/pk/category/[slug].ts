@@ -1,6 +1,6 @@
-import { normalize } from '../../_normalize.js'
-import { cors, cache, upstreamJson, addCacheDebugHeaders } from '../../_shared.js'
-import { withHttpMetrics } from '../../_httpMetrics.js'
+import { normalize } from '../../../lib/_normalize.js'
+import { cors, cache, upstreamJson, addCacheDebugHeaders } from '../../../lib/_shared.js'
+import { withHttpMetrics } from '../../../lib/_httpMetrics.js'
 import {
   getFresh,
   getStale,
@@ -8,9 +8,9 @@ import {
   setNegativeCache,
   getAny,
   getFreshOrL2,
-} from '../../_cache.js'
-import { buildCacheKey } from '../../_key.js'
-import { getProvidersForPK, tryProvidersSequential } from '../../_providers.js'
+} from '../../../lib/_cache.js'
+import { buildCacheKey } from '../../../lib/_key.js'
+import { getProvidersForPK, tryProvidersSequential } from '../../../lib/_providers.js'
 
 async function handler(req: any, res: any) {
   cors(res)

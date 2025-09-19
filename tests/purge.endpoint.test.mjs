@@ -2,7 +2,7 @@ import assert from 'assert'
 
 export async function test() {
   // Simulate calling purge handler directly (no HTTP server launch needed)
-  const { setCache } = await import('../api/_cache.js')
+  const { setCache } = await import('../lib/_cache.js')
   const purgeMod = await import('../api/purge.ts')
   // Insert entry
   setCache('purge:test:key', { ok: true }, 30, 30)

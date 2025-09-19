@@ -5,8 +5,14 @@
     { "src": "^(?!/api/).*", "dest": "/index.html" }
   ],
   "functions": {
-    "api/**/*.{js,ts}": {
-      "runtime": "@vercel/node@5.3.11"
-    }
+    "api/world.ts": { "runtime": "@vercel/node@5.3.11" },
+    "api/pk.ts": { "runtime": "@vercel/node@5.3.11" },
+    "api/search.ts": { "runtime": "@vercel/node@5.3.11" },
+    "api/purge.ts": { "runtime": "@vercel/node@5.3.11" },
+    "api/cacheMetrics.ts": { "runtime": "@vercel/node@5.3.11" },
+    "api/metrics/**": { "runtime": "@vercel/node@5.3.11" },
+    "api/trending/**": { "runtime": "@vercel/node@5.3.11" },
+    "api/world/**": { "runtime": "@vercel/node@5.3.11" },
+    "api/pk/**": { "runtime": "@vercel/node@5.3.11" }
   }
 }

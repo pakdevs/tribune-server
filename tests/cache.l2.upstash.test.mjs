@@ -29,7 +29,7 @@ export async function test() {
     return { ok: false, json: async () => ({}) }
   }
 
-  const { l2Set, l2Get } = await import('../api/_l2.js')
+  const { l2Set, l2Get } = await import('../lib/_l2.js')
   await l2Set('foo', { value: 123 }, 10) // effective TTL should be 30 via multiplier 3
   const v = await l2Get('foo')
   assert(v && v.value === 123, 'should retrieve mocked value')

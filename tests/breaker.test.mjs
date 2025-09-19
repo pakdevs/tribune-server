@@ -6,7 +6,7 @@ export async function test() {
   process.env.BREAKER_OPEN_MS = '50'
   process.env.BREAKER_OPEN_MS_MAX = '200'
 
-  const b = await import('../api/_breaker.ts')
+  const b = await import('../lib/_breaker.ts')
   b.__resetBreaker()
 
   const NAME = 'breaker:test'

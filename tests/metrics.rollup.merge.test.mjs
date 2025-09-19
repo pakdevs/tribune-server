@@ -1,8 +1,8 @@
 import assert from 'assert'
 
 // Import the modules under test
-import { recordHttp, recordUpstream, snapshotAndReset } from '../api/_metrics.js'
-import { flushMetricsNow, getRollups, summarizeRollups } from '../api/_rollup.js'
+import { recordHttp, recordUpstream, snapshotAndReset } from '../lib/_metrics.js'
+import { flushMetricsNow, getRollups, summarizeRollups } from '../lib/_rollup.js'
 
 // We rely on flushMetricsNow performing a snapshotAndReset internally.
 // This test simulates multiple observations in one hour and checks aggregation.

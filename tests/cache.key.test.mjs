@@ -1,5 +1,5 @@
 import assert from 'node:assert'
-import { canonicalizeParams, buildCacheKey, shortHashKey } from '../api/_key.js'
+import { canonicalizeParams, buildCacheKey, shortHashKey } from '../lib/_key.js'
 
 // Basic invariants
 const a = { q: 'Hello World', country: 'US', page: 1, domains: ['Bbc.com', 'cnn.com', 'Cnn.com'] }

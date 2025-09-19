@@ -1,12 +1,17 @@
-import { normalize } from './_normalize.js'
-import { cors, cache, upstreamJson, addCacheDebugHeaders } from './_shared.js'
-import { withHttpMetrics } from './_httpMetrics.js'
-import { getFresh, getStale, setCache, getFreshOrL2 } from './_cache.js'
-import { maybeScheduleRevalidate } from './_revalidate.js'
-import { buildCacheKey } from './_key.js'
-import { getProvidersForWorld, tryProvidersSequential } from './_providers.js'
-import { getInFlight, setInFlight } from './_inflight.js'
-import { applyEntityHeaders, extractEntityMeta, isNotModified, attachEntityMeta } from './_http.js'
+import { normalize } from '../lib/_normalize.js'
+import { cors, cache, upstreamJson, addCacheDebugHeaders } from '../lib/_shared.js'
+import { withHttpMetrics } from '../lib/_httpMetrics.js'
+import { getFresh, getStale, setCache, getFreshOrL2 } from '../lib/_cache.js'
+import { maybeScheduleRevalidate } from '../lib/_revalidate.js'
+import { buildCacheKey } from '../lib/_key.js'
+import { getProvidersForWorld, tryProvidersSequential } from '../lib/_providers.js'
+import { getInFlight, setInFlight } from '../lib/_inflight.js'
+import {
+  applyEntityHeaders,
+  extractEntityMeta,
+  isNotModified,
+  attachEntityMeta,
+} from '../lib/_http.js'
 
 export default withHttpMetrics(async function handler(req: any, res: any) {
   cors(res)

@@ -12,10 +12,10 @@ export async function test() {
   process.env.ADAPTIVE_REVAL_ENABLED = '1'
   process.env.ADAPTIVE_EMA_ALPHA = '0.9'
   process.env.ADAPTIVE_HOT_HPM = '5'
-  const { setCache, cacheInfo } = await import('../api/_cache.js')
-  const { maybeScheduleRevalidate, __resetBgRevalidate } = await import('../api/_revalidate.ts')
-  const { recordHit, resetAdaptive } = await import('../api/_adaptive.ts')
-  const { prefetchStats, __resetPrefetch } = await import('../api/_prefetch.ts')
+  const { setCache, cacheInfo } = await import('../lib/_cache.js')
+  const { maybeScheduleRevalidate, __resetBgRevalidate } = await import('../lib/_revalidate.ts')
+  const { recordHit, resetAdaptive } = await import('../lib/_adaptive.ts')
+  const { prefetchStats, __resetPrefetch } = await import('../lib/_prefetch.ts')
 
   __resetBgRevalidate()
   resetAdaptive()
@@ -47,7 +47,7 @@ export async function test() {
   const hotInfoA1 = cacheInfo(keyA)
   assert(hotInfoA1, 'expected cache info A')
   // access to increment lookups => triggers maybeLog occasionally; we simulate by calling getFresh
-  const { getFresh } = await import('../api/_cache.js')
+  const { getFresh } = await import('../lib/_cache.js')
   getFresh(keyA)
   getFresh(keyB)
 

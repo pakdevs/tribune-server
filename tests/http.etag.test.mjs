@@ -3,8 +3,8 @@ import assert from 'assert'
 // Test ETag / 304 conditional GET behaviour for a representative endpoint (search)
 export async function test() {
   // Load modules fresh
-  const { setCache, getFresh } = await import('../api/_cache.js')
-  const { buildEntityMetadata } = await import('../api/_http.js')
+  const { setCache, getFresh } = await import('../lib/_cache.js')
+  const { buildEntityMetadata } = await import('../lib/_http.js')
 
   // We'll simulate how endpoint stores payload with attached meta.
   const key = 'search:test'
@@ -26,7 +26,7 @@ export async function test() {
 
   // Simulate client sending If-None-Match matching the stored ETag
   // Use helper logic isNotModified directly
-  const { isNotModified } = await import('../api/_http.js')
+  const { isNotModified } = await import('../lib/_http.js')
   const req = { headers: { 'if-none-match': meta.etag } }
   const notMod = isNotModified(req, { etag: meta.etag, lastModified: meta.lastModified })
   assert.strictEqual(notMod, true, 'Request should be not modified with matching ETag')

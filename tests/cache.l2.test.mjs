@@ -3,8 +3,8 @@ import assert from 'assert'
 export async function test() {
   // Enable L2 before importing cache module
   process.env.ENABLE_L2_CACHE = '1'
-  const { setCache, __deleteMemoryKey, getFresh, getFreshOrL2 } = await import('../api/_cache.js')
-  const { l2Set } = await import('../api/_l2.js')
+  const { setCache, __deleteMemoryKey, getFresh, getFreshOrL2 } = await import('../lib/_cache.js')
+  const { l2Set } = await import('../lib/_l2.js')
   const key = 'l2:test:key'
   setCache(key, { value: 42 }, 10, 10)
   // Explicitly mirror to L2 (write-through is async fire-and-forget; ensure presence for test determinism)

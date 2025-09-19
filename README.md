@@ -4,19 +4,22 @@ Production-focused serverless API aggregator providing normalized news articles 
 
 ## Core Endpoints
 
-| Purpose                         | Route                            | Notes                                                                        |
-| ------------------------------- | -------------------------------- | ---------------------------------------------------------------------------- |
-| World mixed headlines           | `GET /api/world`                 | Backed by Webz.io (country/category filters)                                 |
-| Pakistan headlines              | `GET /api/pk`                    | Backed by Webz.io (country=pk; supports domain/source filters)               |
-| World category                  | `GET /api/world/category/{slug}` | Slugs: business, entertainment, general, health, science, sports, technology |
-| Pakistan category               | `GET /api/pk/category/{slug}`    | Same slug set; fallback logic applies                                        |
-| US Top (legacy single provider) | `GET /api/top`                   | Deprecated                                                                   |
-| Search (global)                 | `GET /api/search?q=term`         | Backed by Webz.io (domain/source filters supported)                          |
-| Provider stats (ephemeral)      | `GET /api/stats`                 | In-memory counts (resets on cold start)                                      |
-| Trending topics (new)           | `GET /api/trending/topics`       | Returns `{ region, asOf, topics[] }` (KV/in-memory cached)                   |
-| About Pakistan (wrapper)        | `GET /api/feeds/about-pakistan`  | Same as `/api/pk?scope=about` with clearer path                              |
+| Purpose               | Route                            | Notes                                                                        |
+| --------------------- | -------------------------------- | ---------------------------------------------------------------------------- |
+| World mixed headlines | `GET /api/world`                 | Backed by Webz.io (country/category filters)                                 |
+| Pakistan headlines    | `GET /api/pk`                    | Backed by Webz.io (country=pk; supports domain/source filters)               |
+| World category        | `GET /api/world/category/{slug}` | Slugs: business, entertainment, general, health, science, sports, technology |
+| Pakistan category     | `GET /api/pk/category/{slug}`    | Same slug set; fallback logic applies                                        |
+| Search (global)       | `GET /api/search?q=term`         | Backed by Webz.io (domain/source filters supported)                          |
+| Trending topics (new) | `GET /api/trending/topics`       | Returns `{ region, asOf, topics[] }` (KV/in-memory cached)                   |
 
 All successful responses: `{ items: Article[] }` (empty array if no matches). Errors: `{ error: string, message? }`.
+
+Deprecated endpoints removed (Hobby plan limits):
+
+- `/api/top` → use `/api/world` with category/country filters
+- `/api/stats` → use `/api/cacheMetrics` and `/api/metrics/rollup`
+- `/api/feeds/about-pakistan` → use `/api/pk?scope=about`
 
 ### Search filters
 
@@ -79,7 +82,7 @@ Aliases accepted (mapped internally): `politics, world → general`, `tech → t
 ## Caching & Headers
 
 - Cache: `s-maxage=300, stale-while-revalidate=60` (CDN layer) via `cache()` helper.
-- CORS: `*` (open). Adjust in `api/_shared.js` if you need to lock to your app domain.
+- CORS: `*` (open). Adjust in `lib/_shared.ts` if you need to lock to your app domain.
 - Basic security headers added: `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options`, `Permissions-Policy`.
 
 ### HTTP Entity Validation (Phase 6)

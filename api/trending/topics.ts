@@ -1,11 +1,16 @@
-import { cors, cache, upstreamJson, addCacheDebugHeaders } from '..//_shared.js'
-import { withHttpMetrics } from '../_httpMetrics.js'
-import { getFresh, getStale, setCache, setNegativeCache, getAny } from '../_cache.js'
-import { applyEntityHeaders, extractEntityMeta, isNotModified, attachEntityMeta } from '../_http.js'
-import { maybeScheduleRevalidate } from '../_revalidate.js'
-import { buildCacheKey } from '../_key.js'
-import { normalize } from '../_normalize.js'
-import { getProvidersForPK, tryProvidersSequential } from '../_providers.js'
+import { cors, cache, upstreamJson, addCacheDebugHeaders } from '../../lib/_shared.js'
+import { withHttpMetrics } from '../../lib/_httpMetrics.js'
+import { getFresh, getStale, setCache, setNegativeCache, getAny } from '../../lib/_cache.js'
+import {
+  applyEntityHeaders,
+  extractEntityMeta,
+  isNotModified,
+  attachEntityMeta,
+} from '../../lib/_http.js'
+import { maybeScheduleRevalidate } from '../../lib/_revalidate.js'
+import { buildCacheKey } from '../../lib/_key.js'
+import { normalize } from '../../lib/_normalize.js'
+import { getProvidersForPK, tryProvidersSequential } from '../../lib/_providers.js'
 
 type Topic = { id: string; slug: string; label: string; score: number }
 

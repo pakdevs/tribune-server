@@ -10,11 +10,11 @@ export async function test() {
   process.env.ADAPTIVE_COLD_FACTOR = '0.5'
   process.env.ADAPTIVE_MIN_HPM_TO_SCHEDULE = '0.05'
   process.env.BG_REVALIDATE_FRESH_THRESHOLD_MS = '5000'
-  const { setCache, getFresh } = await import('../api/_cache.js')
+  const { setCache, getFresh } = await import('../lib/_cache.js')
   const { maybeScheduleRevalidate, __resetBgRevalidate, bgRevalStats } = await import(
-    '../api/_revalidate.ts'
+    '../lib/_revalidate.ts'
   )
-  const { recordHit, computeAdaptiveThreshold, resetAdaptive } = await import('../api/_adaptive.ts')
+  const { recordHit, computeAdaptiveThreshold, resetAdaptive } = await import('../lib/_adaptive.ts')
   __resetBgRevalidate()
   resetAdaptive()
   const hotKey = 'adaptive:hot'

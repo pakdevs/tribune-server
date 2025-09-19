@@ -6,7 +6,7 @@ function sleep(ms) {
 
 export async function test() {
   const { setNegativeCache, getFresh, getStale, getAny, cacheStats } = await import(
-    '../api/_cache.js'
+    '../lib/_cache.js'
   )
   const key = 'neg:test'
   setNegativeCache(key, { error: 'upstream-failure' }, 2) // fresh 2s, stale up to 6s (2 + extra)

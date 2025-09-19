@@ -1,6 +1,6 @@
 import assert from 'assert'
-import { __test_only_injectHour, summarizeRollups } from '../api/_rollup.js'
-import { evaluateSLOs } from '../api/_slo.js'
+import { __test_only_injectHour, summarizeRollups } from '../lib/_rollup.js'
+import { evaluateSLOs } from '../lib/_slo.js'
 
 // We simulate two hours of data with high 5xx + high upstream error to trigger alerts.
 export async function test_slo_alerts() {

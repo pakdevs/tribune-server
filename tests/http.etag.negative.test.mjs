@@ -1,7 +1,7 @@
 import assert from 'assert'
 
 export async function test() {
-  const { buildEntityMetadata } = await import('../api/_http.js')
+  const { buildEntityMetadata } = await import('../lib/_http.js')
   // Initial payload
   const baseTs = Date.now() - 5000
   const p1 = {
@@ -25,7 +25,7 @@ export async function test() {
     'Last-Modified should change with newer publishDate'
   )
   // Simulate client with old ETag / LM; should not be considered not-modified for new meta
-  const { isNotModified } = await import('../api/_http.js')
+  const { isNotModified } = await import('../lib/_http.js')
   const req = { headers: { 'if-none-match': m1.etag, 'if-modified-since': m1.lastModified } }
   const result = isNotModified(req, m2)
   assert.strictEqual(result, false, 'Should NOT return 304 when publishDate advanced')

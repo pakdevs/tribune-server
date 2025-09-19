@@ -3,7 +3,7 @@ import {
   __test_only_injectHour,
   __test_only_forceRetentionPurge,
   getRollups,
-} from '../api/_rollup.js'
+} from '../lib/_rollup.js'
 
 export async function test_retention_purge() {
   process.env.ROLLUP_RETENTION_HOURS = '1' // 1 hour retention

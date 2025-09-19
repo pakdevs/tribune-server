@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { normalize } from '../api/_normalize.ts'
+import { normalize } from '../lib/_normalize.ts'
 
 test('isFromPK true for .pk domain', () => {
   const b = normalize({ title: 'x', url: 'https://tribune.com.pk/news' })

@@ -1,14 +1,19 @@
-import { normalize } from './_normalize.js'
-import { dedupeByTitle } from './_dedupe.js'
-import { cors, cache, upstreamJson, addCacheDebugHeaders } from './_shared.js'
-import { getFresh, getStale, setCache, getFreshOrL2 } from './_cache.js'
-import { maybeScheduleRevalidate } from './_revalidate.js'
-import { buildCacheKey } from './_key.js'
-import { getProvidersForPK, tryProvidersSequential } from './_providers.js'
-import { getUsedToday } from './_budget.js'
-import { getInFlight, setInFlight } from './_inflight.js'
-import { applyEntityHeaders, extractEntityMeta, isNotModified, attachEntityMeta } from './_http.js'
-import { withHttpMetrics } from './_httpMetrics.js'
+import { normalize } from '../lib/_normalize.js'
+import { dedupeByTitle } from '../lib/_dedupe.js'
+import { cors, cache, upstreamJson, addCacheDebugHeaders } from '../lib/_shared.js'
+import { getFresh, getStale, setCache, getFreshOrL2 } from '../lib/_cache.js'
+import { maybeScheduleRevalidate } from '../lib/_revalidate.js'
+import { buildCacheKey } from '../lib/_key.js'
+import { getProvidersForPK, tryProvidersSequential } from '../lib/_providers.js'
+import { getUsedToday } from '../lib/_budget.js'
+import { getInFlight, setInFlight } from '../lib/_inflight.js'
+import {
+  applyEntityHeaders,
+  extractEntityMeta,
+  isNotModified,
+  attachEntityMeta,
+} from '../lib/_http.js'
+import { withHttpMetrics } from '../lib/_httpMetrics.js'
 
 export default withHttpMetrics(async function handler(req: any, res: any) {
   cors(res)

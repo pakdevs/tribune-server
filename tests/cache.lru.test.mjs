@@ -6,7 +6,7 @@ function sleep(ms) {
 
 // Use node test runner style (top-level since tsx picks up file)
 export async function test() {
-  const { setCache, getFresh, getStale, cacheStats } = await import('../api/_cache.js')
+  const { setCache, getFresh, getStale, cacheStats } = await import('../lib/_cache.js')
 
   for (let i = 0; i < 10; i++) setCache('k' + i, { v: i }, 5, 5)
   const statsAfter = cacheStats()

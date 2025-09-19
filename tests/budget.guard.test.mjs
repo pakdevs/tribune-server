@@ -8,11 +8,11 @@ export async function test() {
   process.env.ENABLE_BG_REVALIDATE = '1'
   process.env.BG_REVALIDATE_FRESH_THRESHOLD_MS = '2000'
 
-  const { setCache } = await import('../api/_cache.js')
+  const { setCache } = await import('../lib/_cache.js')
   const { maybeScheduleRevalidate, __resetBgRevalidate, bgRevalStats } = await import(
-    '../api/_revalidate.ts'
+    '../lib/_revalidate.ts'
   )
-  const { spend, getUsedToday } = await import('../api/_budget.ts')
+  const { spend, getUsedToday } = await import('../lib/_budget.ts')
 
   __resetBgRevalidate()
 

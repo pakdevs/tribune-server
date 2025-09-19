@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { titleSimilarity, dedupeByTitle } from '../api/_dedupe.ts'
+import { titleSimilarity, dedupeByTitle } from '../lib/_dedupe.ts'
 
 test('titleSimilarity catches close variants', () => {
   const a = 'Pakistan wins the T20 series against India'

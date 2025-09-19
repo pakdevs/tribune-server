@@ -2,7 +2,7 @@ import assert from 'assert'
 
 export async function test() {
   // Simulate trending topics payload (topics stored under items for metadata builder compatibility)
-  const { buildEntityMetadata } = await import('../api/_http.js')
+  const { buildEntityMetadata } = await import('../lib/_http.js')
   process.env.ETAG_MODE = 'strong'
   const items = [
     { id: 'economy', publishDate: '2025-09-16T08:00:00Z', title: 'Economy Growth' },
