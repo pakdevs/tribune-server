@@ -75,8 +75,12 @@ async function loadRollup(hour: string): Promise<RollupDoc> {
   const kv = await getKV()
   if (kv) {
     const key = `metrics:rollup:${hour}`
-    const existing = (await kv.get(key)) as RollupDoc | null
-    if (existing) return existing
+    try {
+      const existing = (await kv.get(key)) as RollupDoc | null
+      if (existing) return existing
+    } catch {
+      // KV available but not configured or failing; fall back to memory
+    }
   }
   if (memRollups.has(hour)) return memRollups.get(hour) as RollupDoc
   const doc = newEmptyDoc(hour)
@@ -88,7 +92,11 @@ async function saveRollup(doc: RollupDoc) {
   const kv = await getKV()
   if (kv) {
     const key = `metrics:rollup:${doc.hour}`
-    await kv.set(key, doc, { ex: retentionHours() * 3600 }) // TTL aligns with retention
+    try {
+      await kv.set(key, doc, { ex: retentionHours() * 3600 }) // TTL aligns with retention
+    } catch {
+      // Ignore KV failures; always persist to memory as fallback
+    }
   }
   memRollups.set(doc.hour, doc)
 }
