@@ -17,6 +17,8 @@ import('./_prefetch.js')
     if (typeof m.registerFetcher === 'function') __registerPrefetch = m.registerFetcher
   })
   .catch(() => {})
+import { getWebzDailyLimit, getWebzCallCost } from './_env.js'
+import { getUsedToday } from './_budget.js'
 
 /**
  * Lightweight opportunistic background revalidation (Phase 4 scaffold).
@@ -107,6 +109,22 @@ export function maybeScheduleRevalidate(key: string, fetcher: RevalidateFetcher)
       metrics.skippedFresh++
       return
     }
+    // Phase 8: Budget guard for background work (preserve some room for foreground)
+    try {
+      const limit = getWebzDailyLimit()
+      const cost = getWebzCallCost()
+      const used = getUsedToday('webz')
+      if (Number.isFinite(limit) && limit > 0) {
+        const remaining = limit - used
+        const softRemain = (process as any)?.env?.BUDGET_SOFT_REMAIN
+          ? Math.max(0, parseInt(String((process as any).env.BUDGET_SOFT_REMAIN), 10) || 0)
+          : 3
+        if (remaining <= Math.max(softRemain, cost)) {
+          metrics.skippedRecent++ // reuse metric as a generic skip
+          return
+        }
+      }
+    } catch {}
     // Rate-limit per key
     const last = lastSuccess.get(key) || 0
     if (Date.now() - last < MIN_INTERVAL_MS) {

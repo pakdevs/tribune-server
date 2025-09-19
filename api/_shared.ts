@@ -96,6 +96,17 @@ export async function addCacheDebugHeaders(res: any, req?: any) {
           res.setHeader('X-Prefetch-Skipped-Throttled', String(p.prefetchSkippedThrottled))
         }
       } catch {}
+      // Breaker stats
+      try {
+        const bmod: any = await import('./_breaker.js')
+        if (bmod.getBreakerSnapshot) {
+          const b = bmod.getBreakerSnapshot()
+          const webz = b?.webz
+          if (webz && webz.state) {
+            res.setHeader('X-Breaker-Webz', String(webz.state))
+          }
+        }
+      } catch {}
     } catch {}
 
     // Entity headers exposure (if response already has them set earlier in flow)

@@ -137,6 +137,21 @@ Operational guidance:
 
 Future enhancements (not yet): per-field inclusion allowlist, partial diff endpoint, per-client validator negotiation.
 
+### Observability & Resilience (Phases 7–8)
+
+- Durable metrics rollups (hourly): `GET /api/metrics/rollup?hours=6` (Bearer `METRICS_API_TOKEN` optional)
+- Cache and background stats: `GET /api/cacheMetrics` (now includes `breaker` and `budget` snapshots)
+- Circuit breaker: per-provider with exponential backoff; debug header `X-Breaker-Webz` when `?debug=1`
+- Budget guardrails: soft reserve to protect foreground traffic (`BUDGET_SOFT_REMAIN`)
+
+Key envs (subset):
+
+- `BREAKER_ENABLED`, `BREAKER_FAILURE_BURST`, `BREAKER_OPEN_MS`, `BREAKER_OPEN_MS_MAX`
+- `WEBZ_DAILY_LIMIT`, `WEBZ_CALL_COST`, `BUDGET_SOFT_REMAIN`
+- `METRICS_API_TOKEN` (read), `METRICS_PUSH_URL`/`METRICS_PUSH_TOKEN` (optional push)
+
+See `app/docs/server/implemented.md` → Phase 7 & 8 for full details.
+
 ### Background Revalidation (Phase 4)
 
 Lightweight opportunistic background revalidation keeps hot keys fresh without adding latency to client responses.
@@ -333,6 +348,15 @@ Per-response headers:
 - `X-Provider-Articles`: number of normalized articles.
 
 Ephemeral usage summary: `GET /api/stats`.
+
+## App Metrics Dashboard
+
+The mobile app includes a simple metrics dashboard screen (`app/app/metrics.tsx`) that consumes `/api/cacheMetrics` and `/api/metrics/rollup`. Configure:
+
+- `EXPO_PUBLIC_SERVER_BASE` – your deployed server URL
+- `EXPO_PUBLIC_METRICS_TOKEN` – optional bearer token for metrics endpoints
+
+This screen is not linked by default; you can add a dev-only entry point in Settings.
 
 ## Maintenance
 

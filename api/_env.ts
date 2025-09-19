@@ -32,3 +32,19 @@ export function getWebzCallCost(): number {
   const n = Number(v)
   return Number.isFinite(n) ? Math.max(1, Math.floor(n)) : 1
 }
+
+// Phase 8: Budget soft limit (stop prefetch/revalidate below remaining threshold)
+export function getBudgetSoftRemain(): number {
+  const v = (process as any).env.BUDGET_SOFT_REMAIN
+  if (v === undefined) return 3 // keep a few calls for foreground traffic
+  const n = Number(v)
+  return Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 3
+}
+
+// Phase 8: breaker toggles (read by _breaker.ts internally); keeping helper exports for docs/tests
+export function isBreakerEnabled(): boolean {
+  const v = (process as any).env.BREAKER_ENABLED
+  if (v === undefined) return true
+  const s = String(v).trim().toLowerCase()
+  return s === '1' || s === 'true' || s === 'yes'
+}

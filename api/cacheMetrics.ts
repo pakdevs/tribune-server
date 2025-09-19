@@ -13,11 +13,15 @@ async function handler(req: any, res: any) {
     const cacheMod: any = await import('./_cache.js')
     const revalMod: any = await import('./_revalidate.js').catch(() => ({}))
     const adaptiveMod: any = await import('./_adaptive.js').catch(() => ({}))
+    const breakerMod: any = await import('./_breaker.js').catch(() => ({}))
+    const budgetMod: any = await import('./_budget.js').catch(() => ({}))
     const stats = cacheMod.cacheStats?.()
     const reval = revalMod.bgRevalStats ? revalMod.bgRevalStats() : null
     const prefetchMod: any = await import('./_prefetch.js').catch(() => ({}))
     const prefetch = prefetchMod.prefetchStats ? prefetchMod.prefetchStats() : null
     const adaptive = adaptiveMod.adaptiveStats ? adaptiveMod.adaptiveStats(20) : null
+    const breaker = breakerMod.getBreakerSnapshot ? breakerMod.getBreakerSnapshot() : null
+    const budget = budgetMod.getBudgetSnapshot ? budgetMod.getBudgetSnapshot() : null
     res.setHeader('Cache-Control', 'no-store')
     const ok = stats?.metricsPushOk || 0
     const fail = stats?.metricsPushFail || 0
@@ -28,6 +32,8 @@ async function handler(req: any, res: any) {
       revalidation: reval,
       prefetch,
       adaptive,
+      breaker,
+      budget,
       push: stats
         ? {
             ok,

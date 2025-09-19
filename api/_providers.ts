@@ -1,7 +1,14 @@
 import { recordSuccess, recordError, recordEmpty } from './_stats.js'
 import { isCoolingDown, setCooldown } from './_cooldown.js'
-import { getWebzApiKey, getWebzUseLite, getWebzDailyLimit, getWebzCallCost } from './_env.js'
+import {
+  getWebzApiKey,
+  getWebzUseLite,
+  getWebzDailyLimit,
+  getWebzCallCost,
+  getBudgetSoftRemain,
+} from './_env.js'
 import { canSpend, spend, getUsedToday } from './_budget.js'
+import * as breaker from './_breaker.js'
 
 const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n))
 
@@ -116,6 +123,11 @@ export async function tryProvidersSequential(
         attemptsDetail.push(`${p.type}(cooldown)`)
         continue
       }
+      // Circuit breaker skip
+      if (!breaker.allowRequest(p.type)) {
+        attemptsDetail.push(`${p.type}(breaker-open)`)
+        continue
+      }
       // Budget gating for Webz
       if (p.type === 'webz') {
         const limit = getWebzDailyLimit()
@@ -153,6 +165,7 @@ export async function tryProvidersSequential(
           let items = req.pick(json)
           if (Array.isArray(items) && items.length) {
             recordSuccess(p.type, items.length)
+            breaker.onSuccess(p.type)
             attemptsDetail.push(`${p.type}:${label}(ok:${items.length})`)
             // Webz Lite pagination via next URL
             if (p.type === 'webz' && getWebzUseLite()) {
@@ -193,6 +206,7 @@ export async function tryProvidersSequential(
         } catch (err: any) {
           const msg = String(err?.message || '')
           const status = err?.status || (msg.match(/\b(\d{3})\b/)?.[1] ?? '')
+          breaker.onFailure(p.type, Number(status))
           if (String(status) === '422') {
             attemptsDetail.push(`${p.type}:${label}(422)`) // try next variant
             return null
