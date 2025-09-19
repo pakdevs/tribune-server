@@ -1,12 +1,7 @@
 import { recordSuccess, recordError, recordEmpty } from './_stats.js'
 import { isCoolingDown, setCooldown } from './_cooldown.js'
-import {
-  getWebzApiKey,
-  getWebzUseLite,
-  getWebzDailyLimit,
-  getWebzCallCost,
-  getBudgetSoftRemain,
-} from './_env.js'
+import { getWebzApiKey, getWebzUseLite, getWebzDailyLimit, getWebzCallCost } from './_env.js'
+import { getGnewsApiKey } from './_env.js'
 import { canSpend, spend, getUsedToday } from './_budget.js'
 import * as breaker from './_breaker.js'
 
@@ -23,6 +18,8 @@ export function getProvidersForWorld() {
   const list: Array<{ type: string; key: string }> = []
   const webz = getWebzApiKey()
   if (webz) list.push({ type: 'webz', key: webz })
+  const gnews = getGnewsApiKey()
+  if (gnews) list.push({ type: 'gnews', key: gnews })
   return list
 }
 
@@ -86,6 +83,46 @@ export function buildProviderRequest(p: any, intent: 'top' | 'search', opts: any
     }
     return { url, headers: {}, pick }
   }
+  if (p.type === 'gnews') {
+    // GNews top headlines API
+    // Docs: https://gnews.io/docs/v4#top-headlines
+    const params = new URLSearchParams()
+    params.set('lang', String(opts.language || 'en'))
+    params.set('token', p.key)
+    // Page & size: GNews supports max 10 per request; we'll enforce 10 for consistency
+    const page = clamp(parseInt(String(opts.page || '1'), 10) || 1, 1, 100000)
+    params.set('page', String(page))
+    params.set('max', '10')
+    if (opts.q) params.set('q', String(opts.q))
+    // Map category to topic where possible
+    const category: string | undefined = opts.category
+      ? String(opts.category).toLowerCase()
+      : undefined
+    // Allowed topics: world, nation, business, technology, entertainment, sports, science, health
+    const topicAlias: Record<string, string> = {
+      general: 'world',
+      world: 'world',
+      business: 'business',
+      technology: 'technology',
+      tech: 'technology',
+      entertainment: 'entertainment',
+      sports: 'sports',
+      science: 'science',
+      health: 'health',
+      politics: 'nation',
+    }
+    if (category) {
+      const topic = topicAlias[category]
+      if (topic) params.set('topic', topic)
+    }
+    // Country mapping: GNews uses country codes e.g., us, pk; if provided, set it
+    if (opts.country && /^[a-z]{2}$/i.test(String(opts.country))) {
+      params.set('country', String(opts.country).toLowerCase())
+    }
+    const url = `https://gnews.io/api/v4/top-headlines?${params.toString()}`
+    const pick = (d: any) => d?.articles || d?.posts || d?.results || []
+    return { url, headers: {}, pick }
+  }
   // No other providers supported
   return null
 }
@@ -146,6 +183,11 @@ export async function tryProvidersSequential(
         variants.push({ label: 'no-domains-sources', o: { ...opts, domains: [], sources: [] } })
         if (!pinQ) variants.push({ label: 'no-q', o: { ...opts, q: undefined } })
         variants.push({ label: 'no-country', o: { ...opts, country: undefined } })
+      } else if (p.type === 'gnews') {
+        // GNews does not support domains/sources filters; keep it simple
+        variants.push({ label: 'as-is', o: { ...opts, domains: [], sources: [] } })
+        if (!pinQ) variants.push({ label: 'no-q', o: { ...opts, q: undefined, domains: [], sources: [] } })
+        variants.push({ label: 'topic-only', o: { ...opts, q: undefined, domains: [], sources: [], page: 1 } })
       } else {
         variants.push({ label: 'as-is', o: { ...opts } })
       }

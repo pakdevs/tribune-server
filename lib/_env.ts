@@ -8,6 +8,12 @@ export function getWebzApiKey(): string | undefined {
   return key ? String(key) : undefined
 }
 
+// GNews API key (set GNEWS_API in Vercel env)
+export function getGnewsApiKey(): string | undefined {
+  const key = (process as any).env.GNEWS_API
+  return key ? String(key) : undefined
+}
+
 // Whether to use Webz News API Lite (free tier). Defaults to true if unset.
 export function getWebzUseLite(): boolean {
   const v = (process as any).env.WEBZ_USE_LITE
