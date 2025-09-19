@@ -21,6 +21,16 @@ Deprecated endpoints removed (Hobby plan limits):
 - `/api/stats` → use `/api/cacheMetrics` and `/api/metrics/rollup`
 - `/api/feeds/about-pakistan` → use `/api/pk?scope=about`
 
+### Deployment mapping (Vercel Hobby ≤ 12 functions)
+
+To stay within the Hobby plan function cap, we:
+
+- Moved shared helpers out of `api/` into `lib/` so they don't generate routes.
+- Added a `vercel.json` that explicitly maps only the intended routes: `world`, `pk`, `search`, `purge`, `cacheMetrics`, `metrics/**`, `trending/**` (and nested world/**, pk/** for categories).
+- Added a `.vercelignore` to exclude `api/_*.ts`, `api/**/_*.ts`, and deprecated endpoints from deployment.
+
+This ensures only the required functions are built and deployed.
+
 ### Search filters
 
 - `domains` (comma-separated): limit results to specific hostnames.
@@ -61,6 +71,11 @@ WEBZ_API=your_webz_api_key_here
 
 The server loads it automatically via `dotenv` only in local runs.
 The server uses Webz.io. Keys are never exposed to the client.
+
+Storage integrations (optional):
+
+- Rollups and trending persistence can use either Vercel KV (via the Vercel Marketplace Storage integration) or Upstash Redis.
+- If KV/Redis envs are not configured, rollups and trending fall back to in-memory storage so endpoints continue to work (durability is reduced across cold starts).
 
 ### Pakistan feed filters
 
@@ -325,7 +340,7 @@ Notes:
 - Cron (currently disabled): On the Hobby plan, only one daily cron is allowed. We’ve removed the 15‑minute cron from `vercel.json` during testing and rely on direct pulls with CDN caching.
 - Re‑enable later: When upgrading to Pro (or if you prefer), add a 15‑minute cron back to warm `/api/trending/topics?region=pk` and any hot feeds.
 - External scheduler option: You can use GitHub Actions or UptimeRobot to ping endpoints every 15 minutes for free.
-- Vercel KV (optional): If `@vercel/kv` is installed and env configured, trending topics will read/write a `topics:pk:latest` key for cross‑instance consistency.
+- Vercel KV / Upstash Redis (optional): If storage envs are configured, trending topics will read/write a `topics:pk:latest` key for cross‑instance consistency. Rollup metrics use keys like `metrics:rollup:YYYYMMDDHH`. Without these, both features use in-memory fallback.
 
 ## Future Enhancements (Not Yet Implemented)
 
@@ -360,6 +375,24 @@ The mobile app includes a simple metrics dashboard screen (`app/app/metrics.tsx`
 - `EXPO_PUBLIC_METRICS_TOKEN` – optional bearer token for metrics endpoints
 
 This screen is not linked by default; you can add a dev-only entry point in Settings.
+
+## Monorepo scripts (from repo root)
+
+From the repository root (one level above this folder):
+
+- Typecheck the Expo app:
+
+  ```powershell
+  npm run -s typecheck
+  ```
+
+- Run the server test suite:
+
+  ```powershell
+  npm run -s test
+  ```
+
+These proxy to the `app/` and `tribune-server/` package scripts respectively via the root workspace `package.json`.
 
 ## Maintenance
 
