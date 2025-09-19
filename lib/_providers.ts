@@ -186,8 +186,12 @@ export async function tryProvidersSequential(
       } else if (p.type === 'gnews') {
         // GNews does not support domains/sources filters; keep it simple
         variants.push({ label: 'as-is', o: { ...opts, domains: [], sources: [] } })
-        if (!pinQ) variants.push({ label: 'no-q', o: { ...opts, q: undefined, domains: [], sources: [] } })
-        variants.push({ label: 'topic-only', o: { ...opts, q: undefined, domains: [], sources: [], page: 1 } })
+        if (!pinQ)
+          variants.push({ label: 'no-q', o: { ...opts, q: undefined, domains: [], sources: [] } })
+        variants.push({
+          label: 'topic-only',
+          o: { ...opts, q: undefined, domains: [], sources: [], page: 1 },
+        })
       } else {
         variants.push({ label: 'as-is', o: { ...opts } })
       }
