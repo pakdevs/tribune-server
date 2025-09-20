@@ -7,6 +7,7 @@ interface L2Provider {
 
 const ENABLED = String(process.env.ENABLE_L2_CACHE || '0') === '1'
 const KEY_PREFIX = String(process.env.CACHE_KEY_PREFIX || '')
+const DISABLE_KV = String(process.env.L2_DISABLE_KV || '0') === '1'
 const TTL_MULT_ENV = parseInt(String(process.env.L2_TTL_MULT || ''), 10)
 const TTL_MULT =
   Number.isFinite(TTL_MULT_ENV) && TTL_MULT_ENV >= 1 && TTL_MULT_ENV <= 10 ? TTL_MULT_ENV : 2
@@ -111,8 +112,10 @@ async function initProviders() {
   if (providers.length) return providers
   providers.push(new MemoryL2())
   try {
-    const mod: any = await import('@vercel/kv').catch(() => null)
-    if (mod?.kv) providers.push(new KVProvider(mod.kv))
+    if (!DISABLE_KV) {
+      const mod: any = await import('@vercel/kv').catch(() => null)
+      if (mod?.kv) providers.push(new KVProvider(mod.kv))
+    }
   } catch {}
   const upstashUrl = process.env.UPSTASH_REDIS_REST_URL
   const upstashToken = process.env.UPSTASH_REDIS_REST_TOKEN
