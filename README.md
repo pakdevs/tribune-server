@@ -91,6 +91,26 @@ PK endpoints use `country=pk` and support optional filters:
 - Primary: Webz.io. Endpoints use `newsApiLite` or `newsApi/v3/search` with `q` expressions and optional `countries`, `category`, and `site:` filters.
 - Secondary: GNews `top-headlines` when `GNEWS_API` is set. Applied as a fallback to `/api/world`, `/api/world/category/{slug}`, and now `/api/pk` plus `/api/pk/category/{slug}`. The Sources tab (`/api/pk/source/{slug}`) remains Webz-only to preserve source/domain filtering fidelity. Domain/source filters aren’t supported by GNews and are ignored upstream; we still apply local filtering after normalization if `domains` are provided.
 
+### Pakistan scopes
+
+- `scope=from` (default):
+
+  - Country pinned to PK (`country=pk` or `site.country:PK`).
+  - Results filtered to PK-origin sources only.
+  - Uses Webz first; falls back to GNews top-headlines (`country=pk`) when configured.
+
+- `scope=about` (foreign coverage about Pakistan):
+  - No country pin (global coverage). Post-normalization, PK-origin sources are excluded, keeping only foreign outlets that mention Pakistan.
+  - If the feed is empty and `PK_ABOUT_GNEWS_SEARCH_FALLBACK=1`, the server will try GNews Search with `q=Pakistan` (no country) as a last resort.
+  - Headers still surface provider attempts in `X-Provider-Attempts` and `X-Provider-Attempts-Detail` (enable `?debug=1`).
+
+Optional behaviors (flags):
+
+- `PK_ABOUT_GNEWS_SEARCH_FALLBACK=1`
+  - Enables GNews Search fallback for `scope=about` when top-headlines/Webz return empty. Uses `q=Pakistan` without a country constraint.
+- `PK_SOFT_429=1`
+  - When upstream returns 429 and there is no stale cache, the server responds with `200 { items: [], rateLimited: true }` and header `X-Soft-429: 1` instead of a hard 429. This prevents hard failures in the UI during temporary rate-limit windows. Respect `Retry-After` when present.
+
 ## Category & Aliases
 
 Canonical slugs: `business, entertainment, general, health, science, sports, technology`.
