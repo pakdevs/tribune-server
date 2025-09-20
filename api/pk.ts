@@ -53,7 +53,7 @@ export default withHttpMetrics(async function handler(req: any, res: any) {
   // Enforce fixed page size of 10 per request
   const pageSizeNum = 10
   const country = 'pk'
-  const scope = String(req.query.scope || 'from') // 'from' | 'about'
+  const scope = String(req.query.scope || 'mixed') // 'mixed' | 'from' | 'about'
   const pageToken = req.query.pageToken ? String(req.query.pageToken) : undefined
   // Optional filters: domains (site:), sources (treated as site:), q
   const domains = String(req.query.domains || '')

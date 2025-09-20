@@ -71,8 +71,8 @@
             >
           </li>
           <li>
-            <a href="https://tribune-server.vercel.app/api/pk?page=1&amp;debug=1"
-              >/api/pk?page=1&amp;debug=1</a
+            <a href="https://tribune-server.vercel.app/api/pk?scope=mixed&amp;debug=1"
+              >/api/pk?scope=mixed&amp;debug=1</a
             >
           </li>
           <li>
@@ -88,7 +88,7 @@
         <ul>
           <li>
             <a
-              href="https://tribune-server.vercel.app/api/world?page=1"
+              href="https://tribune-server.vercel.app/api/world?page=1&amp;debug=1"
               target="_blank"
               rel="noopener noreferrer"
               >World — Top headlines</a
@@ -96,15 +96,15 @@
           </li>
           <li>
             <a
-              href="https://tribune-server.vercel.app/api/pk?page=1"
+              href="https://tribune-server.vercel.app/api/pk?scope=mixed&amp;debug=1"
               target="_blank"
               rel="noopener noreferrer"
-              >Pakistan — Top (mixed)</a
+              >Pakistan — Top (mixed, default)</a
             >
           </li>
           <li>
             <a
-              href="https://tribune-server.vercel.app/api/pk?scope=from&amp;page=1"
+              href="https://tribune-server.vercel.app/api/pk?scope=from&amp;page=1&amp;debug=1"
               target="_blank"
               rel="noopener noreferrer"
               >Pakistan — From Pakistan</a
@@ -112,7 +112,7 @@
           </li>
           <li>
             <a
-              href="https://tribune-server.vercel.app/api/pk?scope=about&amp;page=1"
+              href="https://tribune-server.vercel.app/api/pk?scope=about&amp;page=1&amp;debug=1"
               target="_blank"
               rel="noopener noreferrer"
               >Pakistan — About Pakistan</a
@@ -120,7 +120,7 @@
           </li>
           <li>
             <a
-              href="https://tribune-server.vercel.app/api/trending/topics?region=pk"
+              href="https://tribune-server.vercel.app/api/trending/topics?region=pk&amp;debug=1"
               target="_blank"
               rel="noopener noreferrer"
               >Trending Topics — PK</a
@@ -128,7 +128,7 @@
           </li>
           <li>
             <a
-              href="https://tribune-server.vercel.app/api/stats"
+              href="https://tribune-server.vercel.app/api/stats?debug=1"
               target="_blank"
               rel="noopener noreferrer"
               >Stats (Upstream/Provider)</a
@@ -144,7 +144,7 @@
           </li>
           <li>
             <a
-              href="https://tribune-server.vercel.app/api/metrics/rollup?hours=6"
+              href="https://tribune-server.vercel.app/api/metrics/rollup?hours=6&amp;debug=1"
               target="_blank"
               rel="noopener noreferrer"
               >Metrics Rollup (last 6h)</a
@@ -159,6 +159,13 @@
             >
           </li>
         </ul>
+
+        <p class="muted">
+          PK scopes:
+          <br />• <strong>mixed</strong> (default): Top headlines for PK audience (global + local).
+          <br />• <strong>from</strong>: Only Pakistan-origin domains (stricter; fewer items).
+          <br />• <strong>about</strong>: Search “about Pakistan” regardless of source origin.
+        </p>
 
         <p><strong>World categories</strong></p>
         <ul>
