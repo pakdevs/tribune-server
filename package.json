@@ -11,7 +11,8 @@
     "format": "prettier --write \"**/*.{js,json,md}\"",
     "test": "tsx --test tests/*.mjs",
     "smoke": "node scripts/smoke.mjs",
-    "warmup": "node scripts/ping-warmup.mjs"
+    "warmup": "node scripts/ping-warmup.mjs",
+    "seed:allowlist": "node scripts/seed-allowlist.mjs"
   },
   "devDependencies": {
     "dotenv": "^16.4.5",
