@@ -4,7 +4,11 @@ import { cors, cache, upstreamJson, addCacheDebugHeaders } from '../lib/_shared.
 import { getFresh, getStale, setCache, getFreshOrL2 } from '../lib/_cache.js'
 import { maybeScheduleRevalidate } from '../lib/_revalidate.js'
 import { buildCacheKey } from '../lib/_key.js'
-import { getProvidersForPK, tryProvidersSequential } from '../lib/_providers.js'
+import {
+  getProvidersForPK,
+  getProvidersForPKTop,
+  tryProvidersSequential,
+} from '../lib/_providers.js'
 import { getUsedToday } from '../lib/_budget.js'
 import { getInFlight, setInFlight } from '../lib/_inflight.js'
 import {
@@ -96,7 +100,7 @@ export default withHttpMetrics(async function handler(req: any, res: any) {
         await addCacheDebugHeaders(res, req)
         // Opportunistic background revalidation
         maybeScheduleRevalidate(cacheKey, async () => {
-          const providers = getProvidersForPK()
+          const providers = getProvidersForPKTop()
           const enforcedQ =
             scope === 'from' ? [q, 'site.country:PK'].filter(Boolean).join(' AND ') : q
           const result2 = await tryProvidersSequential(
@@ -213,7 +217,7 @@ export default withHttpMetrics(async function handler(req: any, res: any) {
     // Miss path: attempt providers with in-flight dedupe
     res.setHeader('X-Cache', 'MISS')
     // Use Webz-only providers
-    const providers = getProvidersForPK()
+    const providers = getProvidersForPKTop()
     const flightKey = `pk:${country}:${String(pageNum)}:${String(pageSizeNum)}:pt:${
       pageToken || ''
     }:d:${domains.join(',')}:s:${sources.join(',')}:q:${q}`
@@ -373,7 +377,7 @@ export default withHttpMetrics(async function handler(req: any, res: any) {
     setCache(cacheKey, cachePayload)
     // Schedule background revalidation for subsequent near-expiry windows
     maybeScheduleRevalidate(cacheKey, async () => {
-      const providers = getProvidersForPK()
+      const providers = getProvidersForPKTop()
       const enforcedQ = scope === 'from' ? [q, 'site.country:PK'].filter(Boolean).join(' AND ') : q
       const result2 = await tryProvidersSequential(
         providers,

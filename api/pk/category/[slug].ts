@@ -10,7 +10,10 @@ import {
   getFreshOrL2,
 } from '../../../lib/_cache.js'
 import { buildCacheKey } from '../../../lib/_key.js'
-import { getProvidersForPK, tryProvidersSequential } from '../../../lib/_providers.js'
+import {
+  getProvidersForPKTop as getProvidersForPK,
+  tryProvidersSequential,
+} from '../../../lib/_providers.js'
 
 async function handler(req: any, res: any) {
   cors(res)

@@ -62,7 +62,7 @@ Examples:
 Set only in Vercel (never commit keys):
 
 `WEBZ_API`
-`GNEWS_API` (optional; used as secondary for world/home + categories only)
+`GNEWS_API` (optional; used as secondary for world/home + categories, and PK top/category)
 
 Local development: create a `.env` file in this folder with:
 
@@ -89,7 +89,7 @@ PK endpoints use `country=pk` and support optional filters:
 ## Provider Strategy
 
 - Primary: Webz.io. Endpoints use `newsApiLite` or `newsApi/v3/search` with `q` expressions and optional `countries`, `category`, and `site:` filters.
-- Secondary: GNews `top-headlines` when `GNEWS_API` is set. Applied only to `/api/world` and `/api/world/category/{slug}` as a fallback. Not used for Pakistan endpoints or the Sources tab. Domain/source filters aren’t supported by GNews and are ignored upstream; we still apply local filtering after normalization if `domains` are provided.
+- Secondary: GNews `top-headlines` when `GNEWS_API` is set. Applied as a fallback to `/api/world`, `/api/world/category/{slug}`, and now `/api/pk` plus `/api/pk/category/{slug}`. The Sources tab (`/api/pk/source/{slug}`) remains Webz-only to preserve source/domain filtering fidelity. Domain/source filters aren’t supported by GNews and are ignored upstream; we still apply local filtering after normalization if `domains` are provided.
 
 ## Category & Aliases
 

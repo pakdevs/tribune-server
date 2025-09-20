@@ -14,6 +14,17 @@ export function getProvidersForPK() {
   return list
 }
 
+// For Pakistan top/category endpoints we allow GNews as a secondary fallback
+// while keeping Sources endpoint behavior unchanged (webz-first/only by default).
+export function getProvidersForPKTop() {
+  const list: Array<{ type: string; key: string }> = []
+  const webz = getWebzApiKey()
+  if (webz) list.push({ type: 'webz', key: webz })
+  const gnews = getGnewsApiKey()
+  if (gnews) list.push({ type: 'gnews', key: gnews })
+  return list
+}
+
 export function getProvidersForWorld() {
   const list: Array<{ type: string; key: string }> = []
   const webz = getWebzApiKey()
