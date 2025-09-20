@@ -9,7 +9,7 @@ import {
   getProvidersForPKTop,
   tryProvidersSequential,
 } from '../lib/_providers.js'
-import { getUsedToday } from '../lib/_budget.js'
+// GNews-only provider
 import { getInFlight, setInFlight } from '../lib/_inflight.js'
 import {
   applyEntityHeaders,
@@ -102,8 +102,7 @@ export default withHttpMetrics(async function handler(req: any, res: any) {
         // Opportunistic background revalidation
         maybeScheduleRevalidate(cacheKey, async () => {
           const providers = getProvidersForPKTop()
-          const enforcedQ =
-            scope === 'from' ? [q, 'site.country:PK'].filter(Boolean).join(' AND ') : q
+          const enforcedQ = q
           const countryForCalls = scope === 'about' ? undefined : country
           const result2 = await tryProvidersSequential(
             providers,
@@ -253,16 +252,15 @@ export default withHttpMetrics(async function handler(req: any, res: any) {
     }
     // Miss path: attempt providers with in-flight dedupe
     res.setHeader('X-Cache', 'MISS')
-    // Use Webz-only providers
+    // Use GNews-only providers
     const providers = getProvidersForPKTop()
     const flightKey = `pk:${country}:${String(pageNum)}:${String(pageSizeNum)}:pt:${
       pageToken || ''
     }:d:${domains.join(',')}:s:${sources.join(',')}:q:${q}`
     let flight = getInFlight(flightKey)
     if (!flight) {
-      // Enforce country filter for "from" scope via Webz field filter on Lite:
-      // This adds site.country:PK to the query (Lite doesn't accept countries= param)
-      const enforcedQ = scope === 'from' ? [q, 'site.country:PK'].filter(Boolean).join(' AND ') : q
+      // Enforce country filter via provider country parameter when scope=from
+      const enforcedQ = q
       const countryForCalls = scope === 'about' ? undefined : country
       flight = setInFlight(
         flightKey,
@@ -436,10 +434,7 @@ export default withHttpMetrics(async function handler(req: any, res: any) {
     if (sources.length) res.setHeader('X-PK-Sources', sources.join(','))
     res.setHeader('X-Provider-Articles', String(normalized.length))
     if (scope === 'from') res.setHeader('X-PK-Enforced-Country', 'PK')
-    // Budget usage observability (Webz)
-    try {
-      res.setHeader('X-Webz-Used-Today', String(getUsedToday('webz')))
-    } catch {}
+    // Budget usage header removed (single-provider)
     const cachePayload: any = {
       items: normalized,
       meta: {
@@ -453,7 +448,7 @@ export default withHttpMetrics(async function handler(req: any, res: any) {
     // Schedule background revalidation for subsequent near-expiry windows
     maybeScheduleRevalidate(cacheKey, async () => {
       const providers = getProvidersForPKTop()
-      const enforcedQ = scope === 'from' ? [q, 'site.country:PK'].filter(Boolean).join(' AND ') : q
+      const enforcedQ = q
       const countryForCalls = scope === 'about' ? undefined : country
       const result2 = await tryProvidersSequential(
         providers,
@@ -601,7 +596,7 @@ export default withHttpMetrics(async function handler(req: any, res: any) {
         }
         applyEntityHeaders(res, entityMeta)
       }
-      const effectiveQ = scope === 'from' ? [q, 'site.country:PK'].filter(Boolean).join(' AND ') : q
+      const effectiveQ = q
       return res.status(200).json({
         items: normalized,
         debug: {

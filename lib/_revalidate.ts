@@ -17,7 +17,7 @@ import('./_prefetch.js')
     if (typeof m.registerFetcher === 'function') __registerPrefetch = m.registerFetcher
   })
   .catch(() => {})
-import { getWebzDailyLimit, getWebzCallCost } from './_env.js'
+import { getGnewsDailyLimit, getGnewsCallCost } from './_env.js'
 import { getUsedToday } from './_budget.js'
 
 /**
@@ -111,9 +111,9 @@ export function maybeScheduleRevalidate(key: string, fetcher: RevalidateFetcher)
     }
     // Phase 8: Budget guard for background work (preserve some room for foreground)
     try {
-      const limit = getWebzDailyLimit()
-      const cost = getWebzCallCost()
-      const used = getUsedToday('webz')
+      const limit = getGnewsDailyLimit()
+      const cost = getGnewsCallCost()
+      const used = getUsedToday('gnews')
       if (Number.isFinite(limit) && limit > 0) {
         const remaining = limit - used
         const softRemain = (process as any)?.env?.BUDGET_SOFT_REMAIN

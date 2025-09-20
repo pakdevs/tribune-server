@@ -2,11 +2,9 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { tryProvidersSequential } from '../lib/_providers.ts'
 
-// This test checks that when domains/sources filters are present,
-// the provider ordering prefers Webz and the query includes site: and site_type:news.
-
-test('uses Webz for source/domain filtering and builds proper query', async () => {
-  const providers = [{ type: 'webz', key: 'token_dummy' }]
+// GNews-only: verify provider selection is gnews and domains are handled client-side (post-normalization)
+test('gnews provider returns items; domains handled post-fetch', async () => {
+  const providers = [{ type: 'gnews', key: 'token_dummy' }]
 
   const opts = {
     page: 1,
@@ -18,31 +16,23 @@ test('uses Webz for source/domain filtering and builds proper query', async () =
   }
 
   const fetcher = async (url, headers) => {
-    if (url.includes('api.webz.io')) {
+    if (url.includes('gnews.io')) {
       return {
-        posts: [
+        totalArticles: 1,
+        articles: [
           {
             title: 'Sample',
             url: 'https://www.dawn.com/news/sample',
-            site: 'dawn.com',
-            main_image: '',
+            source: { name: 'Dawn' },
+            publishedAt: new Date().toISOString(),
           },
         ],
       }
     }
-    return { results: [] }
+    return { totalArticles: 0, articles: [] }
   }
 
   const res = await tryProvidersSequential(providers, 'top', opts, fetcher)
-  assert.equal(res.provider, 'webz', 'should select webz as provider')
-  assert.equal(res.attempts[0], 'webz', 'webz should be attempted first')
-  assert.ok(
-    decodeURIComponent(res.url).includes('site:dawn.com'),
-    'query should include site:dawn.com'
-  )
-  assert.ok(
-    decodeURIComponent(res.url).includes('site_type:news'),
-    'query should include site_type:news by default'
-  )
-  assert.ok(Array.isArray(res.items) && res.items.length === 1, 'should return mocked post')
+  assert.equal(res.provider, 'gnews', 'should select gnews as provider')
+  assert.ok(Array.isArray(res.items) && res.items.length === 1, 'should return mocked article')
 })

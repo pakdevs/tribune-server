@@ -7,7 +7,7 @@ App-tailored pick
 	- Reliable mainstream coverage, simple filters, good for quota fallback.
 - Budget alt: Newscatcher + Bing
 	- Decent freshness/filters; control quality with a Pakistan domain allowlist.
-- Broad crawl option: Webz.io
+  
 	- Pros: news+blogs+forums, rich Lucene queries, large archive. Cons: pricier, crawl-based licensing, needs strict whitelists/dedupe.
 - Research/trends supplement: GDELT (not primary feed)
 	- Massive global signal; useful for trend alerts and geo/event analysis; noisy for article lists.
@@ -20,7 +20,7 @@ NewsAPI.ai relation
 - NewsAPI.ai is operated by Event Registry (same backend/corpus/ML). Not related to NewsAPI.org.
 
 Feature highlights across providers (beyond basics)
-- Coverage/archive: depth from months to multi-year backfills (Event Registry, Webz.io, enterprise vendors).
+-- Coverage/archive: depth from months to multi-year backfills (Event Registry, enterprise vendors).
 - Query/filtering: boolean/Lucene, field filters, domain whitelists/blacklists, region/country, categories.
 - Enrichment: entities, topics/taxonomy, sentiment, summarization, dedup/clustering, geo extraction.
 - Delivery: REST, streaming/firehose, webhooks; bulk export on higher tiers.
@@ -34,17 +34,15 @@ Pakistan-focused allowlist (starter set)
 Practical integration steps (server)
 - Providers: implement Event Registry (primary) and Bing (fallback) in tribune-server/api/_providers.ts
 	and map fields in tribune-server/api/_normalize.ts.
-- Env keys: EVENT_REGISTRY_API_KEY, BING_NEWS_KEY, (optional) WEBZ_API_KEY.
-- Feature flag: select provider chain in tribune-server/api/_env.ts (e.g., PROVIDER=event-registry|bing|webzio).
+-- Env keys: GNEWS_API (current), others optional for future expansions.
 - Normalization: map to { title, description, url, image, source, publishedAt, language } and
 	dedupe by hostname+title; apply language filter (en, ur) and domain allowlist for PK sources.
 
 Notes
-- If strict source+country control is required, prefer Event Registry or Webz.io (with domain filters).
+-- If strict source+country control is required, consider Event Registry (supports complex filters).
 - For cost-sensitive start, Newscatcher (+ Bing fallback) is viable; upgrade to Event Registry as traffic grows.
 
-AI summaries, sentiment, and translation (Webz.io vs Event Registry)
-- Webz.io
+AI summaries, sentiment, and translation (future optional modules)
 	- Sentiment: yes (article-level).
 	- Enrichment: entities, categories/taxonomy, fake-news/satire and political-slant tags, dedupe, readability/full-text extraction.
 	- Summaries: no standard summary field by default; highlights/snippets available. Some enterprise add-ons may offer summaries (sales-enabled).

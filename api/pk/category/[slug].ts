@@ -84,7 +84,7 @@ async function handler(req: any, res: any) {
     }
     //
     res.setHeader('X-Cache', 'MISS')
-    // Use Webz-only providers
+    // Use GNews-only providers
     const providers = getProvidersForPK()
     const result = await tryProvidersSequential(
       providers,

@@ -6,11 +6,11 @@ Production-focused serverless API aggregator providing normalized news articles 
 
 | Purpose               | Route                            | Notes                                                                        |
 | --------------------- | -------------------------------- | ---------------------------------------------------------------------------- |
-| World mixed headlines | `GET /api/world`                 | Backed by Webz.io (country/category filters)                                 |
-| Pakistan headlines    | `GET /api/pk`                    | Backed by Webz.io (country=pk; supports domain/source filters)               |
+| World mixed headlines | `GET /api/world`                 | Backed by GNews (country/category filters mapped to topics)                  |
+| Pakistan headlines    | `GET /api/pk`                    | Backed by GNews (country=pk; scope=from/about behavior as documented)        |
 | World category        | `GET /api/world/category/{slug}` | Slugs: business, entertainment, general, health, science, sports, technology |
 | Pakistan category     | `GET /api/pk/category/{slug}`    | Same slug set; fallback logic applies                                        |
-| Search (global)       | `GET /api/search?q=term`         | Backed by Webz.io (domain/source filters supported)                          |
+| Search (global)       | `GET /api/search?q=term`         | Backed by GNews Search                                                       |
 | Trending topics (new) | `GET /api/trending/topics`       | Returns `{ region, asOf, topics[] }` (KV/in-memory cached)                   |
 
 All successful responses: `{ items: Article[] }` (empty array if no matches). Errors: `{ error: string, message? }`.
@@ -61,17 +61,16 @@ Examples:
 
 Set only in Vercel (never commit keys):
 
-`WEBZ_API`
-`GNEWS_API` (optional; used as secondary for world/home + categories, and PK top/category)
+`GNEWS_API` (required)
 
 Local development: create a `.env` file in this folder with:
 
 ```
-WEBZ_API=your_webz_api_key_here
+GNEWS_API=your_gnews_api_key_here
 ```
 
 The server loads it automatically via `dotenv` only in local runs.
-The server uses Webz.io. Keys are never exposed to the client.
+Keys are never exposed to the client.
 
 Storage integrations (optional):
 
@@ -82,14 +81,14 @@ Storage integrations (optional):
 
 PK endpoints use `country=pk` and support optional filters:
 
-- `domains`: comma-separated hostnames (maps to Webz `site:` in query)
-- `sources`: comma-separated source IDs or hostnames (mapped to `site:`)
+- `domains`: comma-separated hostnames (enforced locally after normalization)
+- `sources`: comma-separated source IDs/hostnames (enforced locally)
 - `q`: keyword(s) to refine results
 
 ## Provider Strategy
 
-- Primary: Webz.io. Endpoints use `newsApiLite` or `newsApi/v3/search` with `q` expressions and optional `countries`, `category`, and `site:` filters.
-- Secondary: GNews `top-headlines` when `GNEWS_API` is set. Applied as a fallback to `/api/world`, `/api/world/category/{slug}`, and now `/api/pk` plus `/api/pk/category/{slug}`. The Sources tab (`/api/pk/source/{slug}`) remains Webz-only to preserve source/domain filtering fidelity. Domain/source filters aren’t supported by GNews and are ignored upstream; we still apply local filtering after normalization if `domains` are provided.
+- Single provider: GNews. Endpoints use `top-headlines` (with `country` and derived `topic` from category) and `/search` for query-driven flows.
+- Domain/source filters are not supported upstream by GNews; we enforce them locally after normalization when provided.
 
 ### Pakistan scopes
 
@@ -97,7 +96,7 @@ PK endpoints use `country=pk` and support optional filters:
 
   - Country pinned to PK (`country=pk` or `site.country:PK`).
   - Results filtered to PK-origin sources only.
-  - Uses Webz first; falls back to GNews top-headlines (`country=pk`) when configured.
+  - Uses GNews top-headlines (`country=pk`).
 
 - `scope=about` (foreign coverage about Pakistan):
   - No country pin (global coverage). Post-normalization, PK-origin sources are excluded, keeping only foreign outlets that mention Pakistan.
@@ -107,7 +106,7 @@ PK endpoints use `country=pk` and support optional filters:
 Optional behaviors (flags):
 
 - `PK_ABOUT_GNEWS_SEARCH_FALLBACK=1`
-  - Enables GNews Search fallback for `scope=about` when top-headlines/Webz return empty. Uses `q=Pakistan` without a country constraint.
+  - Enables GNews Search fallback for `scope=about` when top-headlines return empty. Uses `q=Pakistan` without a country constraint.
 - `PK_SOFT_429=1`
   - When upstream returns 429 and there is no stale cache, the server responds with `200 { items: [], rateLimited: true }` and header `X-Soft-429: 1` instead of a hard 429. This prevents hard failures in the UI during temporary rate-limit windows. Respect `Retry-After` when present.
 
@@ -181,13 +180,13 @@ Future enhancements (not yet): per-field inclusion allowlist, partial diff endpo
 
 - Durable metrics rollups (hourly): `GET /api/metrics/rollup?hours=6` (Bearer `METRICS_API_TOKEN` optional)
 - Cache and background stats: `GET /api/cacheMetrics` (now includes `breaker` and `budget` snapshots)
-- Circuit breaker: per-provider with exponential backoff; debug header `X-Breaker-Webz` when `?debug=1`
+- Circuit breaker: per-provider with exponential backoff
 - Budget guardrails: soft reserve to protect foreground traffic (`BUDGET_SOFT_REMAIN`)
 
 Key envs (subset):
 
 - `BREAKER_ENABLED`, `BREAKER_FAILURE_BURST`, `BREAKER_OPEN_MS`, `BREAKER_OPEN_MS_MAX`
-- `WEBZ_DAILY_LIMIT`, `WEBZ_CALL_COST`, `BUDGET_SOFT_REMAIN`
+- `GNEWS_DAILY_LIMIT`, `GNEWS_CALL_COST`, `BUDGET_SOFT_REMAIN`
 - `METRICS_API_TOKEN` (read), `METRICS_PUSH_URL`/`METRICS_PUSH_TOKEN` (optional push)
 
 See `app/docs/server/implemented.md` → Phase 7 & 8 for full details.

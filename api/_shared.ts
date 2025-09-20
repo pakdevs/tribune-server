@@ -101,9 +101,9 @@ export async function addCacheDebugHeaders(res: any, req?: any) {
         const bmod: any = await import('./_breaker.js')
         if (bmod.getBreakerSnapshot) {
           const b = bmod.getBreakerSnapshot()
-          const webz = b?.webz
-          if (webz && webz.state) {
-            res.setHeader('X-Breaker-Webz', String(webz.state))
+          const gnews = b?.gnews
+          if (gnews && gnews.state) {
+            res.setHeader('X-Breaker-GNews', String(gnews.state))
           }
         }
       } catch {}

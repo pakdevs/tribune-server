@@ -1,3 +1,3 @@
 import test from 'node:test'
 
-test.skip('Legacy pagination test (skipped under Webz-only configuration)', () => {})
+test.skip('Legacy pagination token test (not applicable under current provider)', () => {})

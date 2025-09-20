@@ -4,7 +4,7 @@ import { getFresh, getStale, setCache, getFreshOrL2 } from '../lib/_cache.js'
 import { maybeScheduleRevalidate } from '../lib/_revalidate.js'
 import { buildCacheKey } from '../lib/_key.js'
 import { getProvidersForWorld, tryProvidersSequential } from '../lib/_providers.js'
-import { getUsedToday } from '../lib/_budget.js'
+// GNews-only provider
 import { getInFlight, setInFlight } from '../lib/_inflight.js'
 import {
   applyEntityHeaders,
@@ -177,9 +177,7 @@ export default withHttpMetrics(async function handler(req: any, res: any) {
     if (domains.length) res.setHeader('X-World-Domains', domains.join(','))
     if (sources.length) res.setHeader('X-World-Sources', sources.join(','))
     res.setHeader('X-Provider-Articles', String(normalized.length))
-    try {
-      res.setHeader('X-Webz-Used-Today', String(getUsedToday('webz')))
-    } catch {}
+    // Usage header removed (single-provider)
     const cachePayload: any = {
       items: normalized,
       meta: {

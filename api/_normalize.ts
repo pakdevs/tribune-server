@@ -58,7 +58,7 @@ export const normalize = (raw: RawArticle | null | undefined): NormalizedArticle
   const author = String(
     (raw as any).author || (raw as any).creator || (raw as any).byline || 'Unknown'
   )
-  // Publish date: try multiple common fields (including Webz fields), then fallback to parsing from content
+  // Publish date: try multiple common fields, then fallback to parsing from content
   let publishDate = String(
     (raw as any).publishDate ||
       (raw as any).publishedAt ||

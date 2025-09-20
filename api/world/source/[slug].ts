@@ -85,12 +85,7 @@ async function handler(req: any, res: any) {
     }
 
     res.setHeader('X-Cache', 'MISS')
-    let providers = getProvidersForWorld()
-    if (targetDomains.length) {
-      providers = [...providers].sort((a, b) =>
-        a.type === 'webz' ? -1 : b.type === 'webz' ? 1 : 0
-      )
-    }
+    const providers = getProvidersForWorld()
     const flightKey = `source:world:${slug}:${name}:${targetDomains.join(',')}:${country}:${String(
       pageNum
     )}:${String(pageSizeNum)}:${from || ''}:${to || ''}`
@@ -110,7 +105,7 @@ async function handler(req: any, res: any) {
           for (const p of ordered) {
             attempts.push(p.type)
             try {
-              // Build strategy fallbacks for Webz: prefer domain-based search, then source slug/name, then q-only
+              // Build strategy fallbacks: prefer domain-based search, then source slug/name, then q-only
               const strategies: Array<{
                 label: string
                 q?: string

@@ -1,25 +1,21 @@
 import { recordSuccess, recordError, recordEmpty } from './_stats.js'
 import { isCoolingDown, setCooldown } from './_cooldown.js'
-import { getWebzApiKey, getWebzUseLite, getWebzDailyLimit, getWebzCallCost } from './_env.js'
-import { getGnewsApiKey } from './_env.js'
-import { canSpend, spend, getUsedToday } from './_budget.js'
+import { getGnewsApiKey, getGnewsDailyLimit, getGnewsCallCost } from './_env.js'
+import { canSpend, spend } from './_budget.js'
 import * as breaker from './_breaker.js'
 
 const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n))
 
 export function getProvidersForPK() {
   const list: Array<{ type: string; key: string }> = []
-  const webz = getWebzApiKey()
-  if (webz) list.push({ type: 'webz', key: webz })
+  const gnews = getGnewsApiKey()
+  if (gnews) list.push({ type: 'gnews', key: gnews })
   return list
 }
 
-// For Pakistan top/category endpoints we allow GNews as a secondary fallback
-// while keeping Sources endpoint behavior unchanged (webz-first/only by default).
+// For Pakistan top/category endpoints we use GNews provider.
 export function getProvidersForPKTop() {
   const list: Array<{ type: string; key: string }> = []
-  const webz = getWebzApiKey()
-  if (webz) list.push({ type: 'webz', key: webz })
   const gnews = getGnewsApiKey()
   if (gnews) list.push({ type: 'gnews', key: gnews })
   return list
@@ -27,8 +23,6 @@ export function getProvidersForPKTop() {
 
 export function getProvidersForWorld() {
   const list: Array<{ type: string; key: string }> = []
-  const webz = getWebzApiKey()
-  if (webz) list.push({ type: 'webz', key: webz })
   const gnews = getGnewsApiKey()
   if (gnews) list.push({ type: 'gnews', key: gnews })
   return list
@@ -54,46 +48,6 @@ export function buildProviderRequest(p: any, intent: 'top' | 'search', opts: any
     ? String(opts.category).toLowerCase()
     : undefined
 
-  if (p.type === 'webz') {
-    const useLite = getWebzUseLite()
-    const params = new URLSearchParams()
-    params.set('token', p.key)
-    let query = q ? String(q) : ''
-    if (domains.length) {
-      const siteExpr = domains.map((d: string) => `site:${d}`).join(' OR ')
-      query = query ? `${query} AND (${siteExpr})` : `(${siteExpr})`
-    }
-    if (sources.length) {
-      const siteExpr = sources.map((s: string) => `site:${s}`).join(' OR ')
-      query = query ? `${query} AND (${siteExpr})` : `(${siteExpr})`
-    }
-    if (!/\bsite_type:\w+/i.test(query)) {
-      query = query ? `${query} AND site_type:news` : 'site_type:news'
-    }
-    if (query) params.set('q', query)
-
-    let url: string
-    let pick: (d: any) => any[]
-    if (useLite) {
-      // Lite endpoint: https://api.webz.io/newsApiLite
-      // Returns up to 10 results and provides a next URL for pagination
-      url = `https://api.webz.io/newsApiLite?${params.toString()}`
-      pick = (d: any) => d?.posts || d?.articles || d?.results || []
-    } else {
-      // Full v3 endpoint with richer params
-      if (opts.language) params.set('language', String(opts.language))
-      if (country) params.set('countries', country)
-      if (category && category !== 'all' && category !== 'general') params.set('category', category)
-      params.set('size', '10')
-      const from = (page - 1) * 10
-      if (from > 0) params.set('from', String(from))
-      if (opts.from) params.set('fromPublishedDate', String(opts.from))
-      if (opts.to) params.set('toPublishedDate', String(opts.to))
-      url = `https://api.webz.io/newsApi/v3/search?${params.toString()}`
-      pick = (d: any) => d?.posts || d?.articles || d?.results || []
-    }
-    return { url, headers: {}, pick }
-  }
   if (p.type === 'gnews') {
     const params = new URLSearchParams()
     params.set('lang', String(opts.language || 'en'))
@@ -156,19 +110,12 @@ export async function tryProvidersSequential(
   const attemptsDetail: string[] = []
   const errorDetails: string[] = []
   if (!providers.length) {
-    const err: any = new Error('No providers configured (WEBZ_API missing)')
-    err.hint = 'Set WEBZ_API in your environment (Vercel env or local .env)'
+    const err: any = new Error('No providers configured (GNEWS_API missing)')
+    err.hint = 'Set GNEWS_API in your environment (Vercel env or local .env)'
     throw err
   }
-  // Use providers as supplied by getProviders* (but prefer Webz when source filters are present)
+  // Use providers as supplied by getProviders*
   let ordered = providers
-  try {
-    const hasDomains = Array.isArray(opts?.domains) && opts.domains.length > 0
-    const hasSources = Array.isArray(opts?.sources) && opts.sources.length > 0
-    if (hasDomains || hasSources) {
-      ordered = [...providers].sort((a, b) => (a.type === 'webz' ? -1 : b.type === 'webz' ? 1 : 0))
-    }
-  } catch {}
   for (let i = 0; i < ordered.length; i++) {
     const p = ordered[i]
     attempts.push(p.type)
@@ -183,25 +130,19 @@ export async function tryProvidersSequential(
         attemptsDetail.push(`${p.type}(breaker-open)`)
         continue
       }
-      // Budget gating for Webz
-      if (p.type === 'webz') {
-        const limit = getWebzDailyLimit()
-        const cost = getWebzCallCost()
-        const gate = canSpend('webz', limit, cost)
+      // Budget gating for GNews
+      if (p.type === 'gnews') {
+        const limit = getGnewsDailyLimit()
+        const cost = getGnewsCallCost()
+        const gate = canSpend('gnews', limit, cost)
         if (!gate.ok) {
-          attemptsDetail.push(`webz(skipped:${gate.reason})`)
+          attemptsDetail.push(`gnews(skipped:${gate.reason})`)
           continue
         }
       }
       const variants: Array<{ label: string; o: any }> = []
       const pinQ = Boolean((opts as any)?.pinQ)
-      if (p.type === 'webz') {
-        variants.push({ label: 'as-is', o: { ...opts } })
-        variants.push({ label: 'no-category', o: { ...opts, category: undefined } })
-        variants.push({ label: 'no-domains-sources', o: { ...opts, domains: [], sources: [] } })
-        if (!pinQ) variants.push({ label: 'no-q', o: { ...opts, q: undefined } })
-        variants.push({ label: 'no-country', o: { ...opts, country: undefined } })
-      } else if (p.type === 'gnews') {
+      if (p.type === 'gnews') {
         // GNews does not support domains/sources filters; keep it simple
         variants.push({ label: 'as-is', o: { ...opts, domains: [], sources: [] } })
         if (!pinQ)
@@ -231,47 +172,15 @@ export async function tryProvidersSequential(
         lastAttemptUrl = req.url
         try {
           const json = await fetcher(req.url, req.headers)
-          // spend budget for Webz on each outward call
-          if (p.type === 'webz') {
-            spend('webz', getWebzCallCost())
+          // spend budget for GNews on each outward call
+          if (p.type === 'gnews') {
+            spend('gnews', getGnewsCallCost())
           }
-          // No special status handling needed for Webz
           let items = req.pick(json)
           if (Array.isArray(items) && items.length) {
             recordSuccess(p.type, items.length)
             breaker.onSuccess(p.type)
             attemptsDetail.push(`${p.type}:${label}(ok:${items.length})`)
-            // Webz Lite pagination via next URL
-            if (p.type === 'webz' && getWebzUseLite()) {
-              const needMore = Math.max(0, (o?.pageSize || opts.pageSize || 0) - items.length)
-              const pageNum = Math.max(1, parseInt(String(o?.page || opts.page || '1'), 10) || 1)
-              // For Lite, each call returns up to 10; emulate page N by following next N-1 times
-              let nextUrl: string | undefined = (json &&
-                (json.next || json.nextPage || json.next_page)) as any
-              let currentPage = 1
-              while (needMore > 0 && nextUrl && currentPage < pageNum) {
-                try {
-                  const nextJson = await fetcher(String(nextUrl), req.headers)
-                  spend('webz', getWebzCallCost())
-                  const more = req.pick(nextJson)
-                  if (Array.isArray(more) && more.length) {
-                    items = items.concat(more)
-                    nextUrl = (nextJson &&
-                      (nextJson.next || nextJson.nextPage || nextJson.next_page)) as any
-                    currentPage += 1
-                  } else {
-                    break
-                  }
-                } catch (e: any) {
-                  errorDetails.push(`${p.type}:next(err:${e?.message || e})`)
-                  break
-                }
-              }
-              // Trim to requested page/pageSize if we overshot
-              if ((o?.pageSize || opts.pageSize) && items.length > (o?.pageSize || opts.pageSize)) {
-                items = items.slice(0, o?.pageSize || opts.pageSize)
-              }
-            }
             return { items, provider: p.type, url: req.url, raw: json }
           }
           recordEmpty(p.type)
