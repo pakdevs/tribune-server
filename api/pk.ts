@@ -18,7 +18,7 @@ import {
   attachEntityMeta,
 } from '../lib/_http.js'
 import { withHttpMetrics } from '../lib/_httpMetrics.js'
-import { isPkAboutGnewsSearchFallbackEnabled } from '../lib/_env.js'
+import { isPkAboutGnewsSearchFallbackEnabled, isPkSoft429Enabled } from '../lib/_env.js'
 
 export default withHttpMetrics(async function handler(req: any, res: any) {
   cors(res)
@@ -652,10 +652,18 @@ export default withHttpMetrics(async function handler(req: any, res: any) {
     const status = Number(e?.status || (/(\b\d{3}\b)/.exec(String(e?.message))?.[1] ?? '0'))
     if (status === 429) {
       const ra = e?.retryAfter
-      if (ra) res.setHeader('Retry-After', String(ra))
-      return res
-        .status(429)
-        .json({ error: 'Rate limited', message: 'Upstream 429', retryAfter: ra || undefined })
+      if (isPkSoft429Enabled()) {
+        // Soft degrade: return empty set with hint header instead of 429
+        res.setHeader('X-Soft-429', '1')
+        if (ra) res.setHeader('Retry-After', String(ra))
+        cache(res, 60, 30)
+        return res.status(200).json({ items: [], rateLimited: true })
+      } else {
+        if (ra) res.setHeader('Retry-After', String(ra))
+        return res
+          .status(429)
+          .json({ error: 'Rate limited', message: 'Upstream 429', retryAfter: ra || undefined })
+      }
     }
     if (String(req.query.debug) === '1') {
       return res.status(500).json({ error: 'Proxy failed', message: e?.message || String(e) })

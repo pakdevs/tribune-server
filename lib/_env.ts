@@ -62,3 +62,12 @@ export function isPkAboutGnewsSearchFallbackEnabled(): boolean {
   const s = String(v).trim().toLowerCase()
   return s === '1' || s === 'true' || s === 'yes'
 }
+
+// Feature flag: when upstream returns 429 and no stale cache exists,
+// respond with 200 + empty items and a hint header instead of passing 429 through.
+export function isPkSoft429Enabled(): boolean {
+  const v = (process as any).env.PK_SOFT_429
+  if (v === undefined) return false
+  const s = String(v).trim().toLowerCase()
+  return s === '1' || s === 'true' || s === 'yes'
+}
