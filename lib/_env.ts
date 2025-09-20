@@ -54,3 +54,11 @@ export function isBreakerEnabled(): boolean {
   const s = String(v).trim().toLowerCase()
   return s === '1' || s === 'true' || s === 'yes'
 }
+
+// Feature flag: allow GNews /search fallback for PK "about" scope when Webz returns nothing
+export function isPkAboutGnewsSearchFallbackEnabled(): boolean {
+  const v = (process as any).env.PK_ABOUT_GNEWS_SEARCH_FALLBACK
+  if (v === undefined) return false
+  const s = String(v).trim().toLowerCase()
+  return s === '1' || s === 'true' || s === 'yes'
+}

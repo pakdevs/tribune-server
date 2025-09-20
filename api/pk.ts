@@ -18,6 +18,7 @@ import {
   attachEntityMeta,
 } from '../lib/_http.js'
 import { withHttpMetrics } from '../lib/_httpMetrics.js'
+import { isPkAboutGnewsSearchFallbackEnabled } from '../lib/_env.js'
 
 export default withHttpMetrics(async function handler(req: any, res: any) {
   cors(res)
@@ -103,13 +104,14 @@ export default withHttpMetrics(async function handler(req: any, res: any) {
           const providers = getProvidersForPKTop()
           const enforcedQ =
             scope === 'from' ? [q, 'site.country:PK'].filter(Boolean).join(' AND ') : q
+          const countryForCalls = scope === 'about' ? undefined : country
           const result2 = await tryProvidersSequential(
             providers,
             'top',
             {
               page: pageNum,
               pageSize: pageSizeNum,
-              country,
+              country: countryForCalls,
               domains,
               sources,
               q: enforcedQ,
@@ -118,7 +120,41 @@ export default withHttpMetrics(async function handler(req: any, res: any) {
             },
             (url, headers) => upstreamJson(url, headers)
           )
-          let normalized2 = result2.items.map(normalize).filter(Boolean)
+          let items2 = result2.items
+          // Guarded fallback: for about-scope, if empty and flag enabled, try GNews search q=Pakistan
+          if (
+            scope === 'about' &&
+            Array.isArray(items2) &&
+            items2.length === 0 &&
+            isPkAboutGnewsSearchFallbackEnabled()
+          ) {
+            const gnewsOnly = providers.filter((p: any) => p.type === 'gnews')
+            if (gnewsOnly.length) {
+              try {
+                const alt = await tryProvidersSequential(
+                  gnewsOnly,
+                  'search',
+                  {
+                    page: pageNum,
+                    pageSize: pageSizeNum,
+                    country: undefined,
+                    q: 'Pakistan',
+                    domains: [],
+                    sources: [],
+                  },
+                  (url, headers) => upstreamJson(url, headers)
+                )
+                items2 = alt.items
+                ;(result2 as any).provider = alt.provider
+                ;(result2 as any).attempts = [...(result2.attempts || []), ...(alt.attempts || [])]
+                ;(result2 as any).attemptsDetail = [
+                  ...(result2.attemptsDetail || []),
+                  ...(alt.attemptsDetail || []),
+                ]
+              } catch {}
+            }
+          }
+          let normalized2 = (items2 || []).map(normalize).filter(Boolean)
           function getTld(host = '') {
             const h = String(host || '').toLowerCase()
             const parts = h.split('.')
@@ -195,7 +231,8 @@ export default withHttpMetrics(async function handler(req: any, res: any) {
           }
           normalized2 = normalized2.map(ensureFlags)
           if (scope === 'from') normalized2 = normalized2.filter((n: any) => n.isFromPK)
-          else if (scope === 'about') normalized2 = normalized2.filter((n: any) => n.isAboutPK)
+          else if (scope === 'about')
+            normalized2 = normalized2.filter((n: any) => n.isAboutPK && !n.isFromPK)
           normalized2 = dedupe(rank(normalized2))
           if (String(process.env.FEATURE_TITLE_DEDUPE || '1') === '1') {
             const { dedupeByTitle } = await import('./_dedupe.js')
@@ -226,23 +263,60 @@ export default withHttpMetrics(async function handler(req: any, res: any) {
       // Enforce country filter for "from" scope via Webz field filter on Lite:
       // This adds site.country:PK to the query (Lite doesn't accept countries= param)
       const enforcedQ = scope === 'from' ? [q, 'site.country:PK'].filter(Boolean).join(' AND ') : q
+      const countryForCalls = scope === 'about' ? undefined : country
       flight = setInFlight(
         flightKey,
-        tryProvidersSequential(
-          providers,
-          'top',
-          {
-            page: pageNum,
-            pageSize: pageSizeNum,
-            country,
-            domains,
-            sources,
-            q: enforcedQ,
-            pinQ: scope === 'from',
-            pageToken,
-          },
-          (url, headers) => upstreamJson(url, headers)
-        )
+        (async () => {
+          const primary = await tryProvidersSequential(
+            providers,
+            'top',
+            {
+              page: pageNum,
+              pageSize: pageSizeNum,
+              country: countryForCalls,
+              domains,
+              sources,
+              q: enforcedQ,
+              pinQ: scope === 'from',
+              pageToken,
+            },
+            (url, headers) => upstreamJson(url, headers)
+          )
+          if (
+            scope === 'about' &&
+            isPkAboutGnewsSearchFallbackEnabled() &&
+            Array.isArray(primary.items) &&
+            primary.items.length === 0
+          ) {
+            const gnewsOnly = providers.filter((p: any) => p.type === 'gnews')
+            if (gnewsOnly.length) {
+              try {
+                const alt = await tryProvidersSequential(
+                  gnewsOnly,
+                  'search',
+                  {
+                    page: pageNum,
+                    pageSize: pageSizeNum,
+                    country: undefined,
+                    q: 'Pakistan',
+                    domains: [],
+                    sources: [],
+                  },
+                  (url, headers) => upstreamJson(url, headers)
+                )
+                return {
+                  ...alt,
+                  attempts: [...(primary.attempts || []), ...(alt.attempts || [])],
+                  attemptsDetail: [
+                    ...(primary.attemptsDetail || []),
+                    ...(alt.attemptsDetail || []),
+                  ],
+                }
+              } catch {}
+            }
+          }
+          return primary
+        })()
       )
     }
     const result = await flight
@@ -324,7 +398,8 @@ export default withHttpMetrics(async function handler(req: any, res: any) {
     }
     normalized = normalized.map(ensureFlags)
     if (scope === 'from') normalized = normalized.filter((n: any) => n.isFromPK)
-    else if (scope === 'about') normalized = normalized.filter((n: any) => n.isAboutPK)
+    else if (scope === 'about')
+      normalized = normalized.filter((n: any) => n.isAboutPK && !n.isFromPK)
     const preCount = normalized.length
     normalized = dedupe(rank(normalized))
     if (String(process.env.FEATURE_TITLE_DEDUPE || '1') === '1') {
@@ -379,13 +454,14 @@ export default withHttpMetrics(async function handler(req: any, res: any) {
     maybeScheduleRevalidate(cacheKey, async () => {
       const providers = getProvidersForPKTop()
       const enforcedQ = scope === 'from' ? [q, 'site.country:PK'].filter(Boolean).join(' AND ') : q
+      const countryForCalls = scope === 'about' ? undefined : country
       const result2 = await tryProvidersSequential(
         providers,
         'top',
         {
           page: pageNum,
           pageSize: pageSizeNum,
-          country,
+          country: countryForCalls,
           domains,
           sources,
           q: enforcedQ,
@@ -394,7 +470,34 @@ export default withHttpMetrics(async function handler(req: any, res: any) {
         },
         (url, headers) => upstreamJson(url, headers)
       )
-      let normalized2 = result2.items.map(normalize).filter(Boolean)
+      let items2 = result2.items
+      if (
+        scope === 'about' &&
+        isPkAboutGnewsSearchFallbackEnabled() &&
+        Array.isArray(items2) &&
+        items2.length === 0
+      ) {
+        const gnewsOnly = providers.filter((p: any) => p.type === 'gnews')
+        if (gnewsOnly.length) {
+          try {
+            const alt = await tryProvidersSequential(
+              gnewsOnly,
+              'search',
+              {
+                page: pageNum,
+                pageSize: pageSizeNum,
+                country: undefined,
+                q: 'Pakistan',
+                domains: [],
+                sources: [],
+              },
+              (url, headers) => upstreamJson(url, headers)
+            )
+            items2 = alt.items
+          } catch {}
+        }
+      }
+      let normalized2 = (items2 || []).map(normalize).filter(Boolean)
       function getTld(host = '') {
         const h = String(host || '').toLowerCase()
         const parts = h.split('.')
@@ -471,7 +574,8 @@ export default withHttpMetrics(async function handler(req: any, res: any) {
       }
       normalized2 = normalized2.map(ensureFlags)
       if (scope === 'from') normalized2 = normalized2.filter((n: any) => n.isFromPK)
-      else if (scope === 'about') normalized2 = normalized2.filter((n: any) => n.isAboutPK)
+      else if (scope === 'about')
+        normalized2 = normalized2.filter((n: any) => n.isAboutPK && !n.isFromPK)
       normalized2 = dedupe(rank(normalized2))
       if (String(process.env.FEATURE_TITLE_DEDUPE || '1') === '1') {
         const { dedupeByTitle } = await import('./_dedupe.js')

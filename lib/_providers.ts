@@ -95,16 +95,27 @@ export function buildProviderRequest(p: any, intent: 'top' | 'search', opts: any
     return { url, headers: {}, pick }
   }
   if (p.type === 'gnews') {
-    // GNews top headlines API
-    // Docs: https://gnews.io/docs/v4#top-headlines
     const params = new URLSearchParams()
     params.set('lang', String(opts.language || 'en'))
     params.set('token', p.key)
-    // Page & size: GNews supports max 10 per request; we'll enforce 10 for consistency
-    const page = clamp(parseInt(String(opts.page || '1'), 10) || 1, 1, 100000)
-    params.set('page', String(page))
+    const pageNum = clamp(parseInt(String(opts.page || '1'), 10) || 1, 1, 100000)
+    params.set('page', String(pageNum))
     params.set('max', '10')
     if (opts.q) params.set('q', String(opts.q))
+    // Country mapping: GNews uses country codes e.g., us, pk; if provided, set it
+    if (opts.country && /^[a-z]{2}$/i.test(String(opts.country))) {
+      params.set('country', String(opts.country).toLowerCase())
+    }
+
+    if (intent === 'search') {
+      // GNews Search API
+      // Docs: https://gnews.io/docs/v4#search
+      const url = `https://gnews.io/api/v4/search?${params.toString()}`
+      const pick = (d: any) => d?.articles || d?.posts || d?.results || []
+      return { url, headers: {}, pick }
+    }
+    // Default: top-headlines
+    // Docs: https://gnews.io/docs/v4#top-headlines
     // Map category to topic where possible
     const category: string | undefined = opts.category
       ? String(opts.category).toLowerCase()
@@ -125,10 +136,6 @@ export function buildProviderRequest(p: any, intent: 'top' | 'search', opts: any
     if (category) {
       const topic = topicAlias[category]
       if (topic) params.set('topic', topic)
-    }
-    // Country mapping: GNews uses country codes e.g., us, pk; if provided, set it
-    if (opts.country && /^[a-z]{2}$/i.test(String(opts.country))) {
-      params.set('country', String(opts.country).toLowerCase())
     }
     const url = `https://gnews.io/api/v4/top-headlines?${params.toString()}`
     const pick = (d: any) => d?.articles || d?.posts || d?.results || []
@@ -199,6 +206,16 @@ export async function tryProvidersSequential(
         variants.push({ label: 'as-is', o: { ...opts, domains: [], sources: [] } })
         if (!pinQ)
           variants.push({ label: 'no-q', o: { ...opts, q: undefined, domains: [], sources: [] } })
+        // Try without country to allow global coverage (useful for PK about scope)
+        variants.push({
+          label: 'no-country',
+          o: { ...opts, country: undefined, domains: [], sources: [] },
+        })
+        if (!pinQ)
+          variants.push({
+            label: 'no-country-no-q',
+            o: { ...opts, country: undefined, q: undefined, domains: [], sources: [] },
+          })
         variants.push({
           label: 'topic-only',
           o: { ...opts, q: undefined, domains: [], sources: [], page: 1 },
