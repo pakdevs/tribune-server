@@ -28,7 +28,7 @@ jobs:
           BASE="${BASE%/}"  # strip trailing slash
           urls=(
             "$BASE/api/world?page=1"
-            "$BASE/api/pk?page=1"
+            "$BASE/api/pk?scope=mixed&page=1"
             "$BASE/api/pk?scope=from&page=1"
             "$BASE/api/pk?scope=about&page=1"
             "$BASE/api/trending/topics?region=pk"
