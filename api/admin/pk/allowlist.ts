@@ -1,7 +1,12 @@
 import { kv } from '@vercel/kv'
 import { cors } from '../../../lib/_shared.js'
 import { withHttpMetrics } from '../../../lib/_httpMetrics.js'
-import { invalidatePkAllowlistCache, getPkAllowlistMeta } from '../../../lib/pkAllowlist.js'
+import {
+  invalidatePkAllowlistCache,
+  getPkAllowlistMeta,
+  savePkAllowlistToStore,
+  deletePkAllowlistFromStore,
+} from '../../../lib/pkAllowlist.js'
 
 function ok(res: any, body: any, status = 200) {
   res.status(status).json(body)
@@ -47,14 +52,14 @@ export default withHttpMetrics(async function handler(req: any, res: any) {
         )
       )
       if (list.length > 500) return res.status(400).json({ error: 'Too many domains' })
-      await kv.set('pk:allowlist', list)
+      const where = await savePkAllowlistToStore(list)
       invalidatePkAllowlistCache()
-      return ok(res, { saved: list.length })
+      return ok(res, { saved: list.length, store: where })
     }
     if (req.method === 'DELETE') {
-      await kv.del('pk:allowlist')
+      const where = await deletePkAllowlistFromStore()
       invalidatePkAllowlistCache()
-      return ok(res, { deleted: true })
+      return ok(res, { deleted: true, store: where })
     }
     return res.status(405).json({ error: 'Method Not Allowed' })
   } catch (e: any) {

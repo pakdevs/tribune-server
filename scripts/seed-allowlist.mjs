@@ -11,6 +11,22 @@
 import { kv } from '@vercel/kv'
 import fs from 'node:fs'
 import path from 'node:path'
+import dotenv from 'dotenv'
+
+function loadEnvCascade() {
+  // Try typical locations without overriding already-set process envs
+  const cwd = process.cwd()
+  const candidates = [
+    path.join(cwd, '.env'), // tribune-server/.env
+    path.join(cwd, '..', '.env'), // repo root .env
+    path.join(cwd, '..', 'app', '.env'), // app/.env (user added here)
+  ]
+  for (const p of candidates) {
+    try {
+      if (fs.existsSync(p)) dotenv.config({ path: p, override: false })
+    } catch {}
+  }
+}
 
 function normalizeHost(h = '') {
   return String(h)
@@ -43,11 +59,13 @@ function loadFromArg(fileArg) {
 }
 
 async function main() {
+  loadEnvCascade()
   const { KV_REST_API_URL, KV_REST_API_TOKEN } = process.env
   if (!KV_REST_API_URL || !KV_REST_API_TOKEN) {
     console.error('Missing KV envs. Set KV_REST_API_URL and KV_REST_API_TOKEN from Vercel KV.')
     process.exit(1)
   }
+  console.log(`Using KV_REST_API_URL: ${KV_REST_API_URL}`)
 
   const arg = process.argv[2]
   let inputList = null
