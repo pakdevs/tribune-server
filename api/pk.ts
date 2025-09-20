@@ -19,15 +19,18 @@ import {
 } from '../lib/_http.js'
 import { withHttpMetrics } from '../lib/_httpMetrics.js'
 import { isPkAboutGnewsSearchFallbackEnabled, isPkSoft429Enabled } from '../lib/_env.js'
-import { getPkAllowlist, isHostInAllowlist } from '../lib/pkAllowlist.js'
+import { getPkAllowlist, getPkAllowlistMeta, isHostInAllowlist } from '../lib/pkAllowlist.js'
 
 export default withHttpMetrics(async function handler(req: any, res: any) {
   cors(res)
   if (req.method === 'OPTIONS') return res.status(204).end()
   // Load PK allowlist (KV-backed) once per request; cached in-memory inside helper
   let allowlist: string[] = []
+  let allowlistSource = 'seed'
   try {
-    allowlist = await getPkAllowlist()
+    const meta = await getPkAllowlistMeta()
+    allowlist = meta.list
+    allowlistSource = meta.source || 'seed'
   } catch {}
   // Minimal rate limiting: 60 req / 60s per IP
   try {
@@ -104,6 +107,8 @@ export default withHttpMetrics(async function handler(req: any, res: any) {
           }
           applyEntityHeaders(res, meta)
         }
+        res.setHeader('X-PK-Allowlist-Source', allowlistSource)
+        res.setHeader('X-PK-Allowlist-Count', String(allowlist?.length || 0))
         await addCacheDebugHeaders(res, req)
         // Opportunistic background revalidation
         maybeScheduleRevalidate(cacheKey, async () => {
@@ -257,6 +262,8 @@ export default withHttpMetrics(async function handler(req: any, res: any) {
     }
     // Miss path: attempt providers with in-flight dedupe
     res.setHeader('X-Cache', 'MISS')
+    res.setHeader('X-PK-Allowlist-Source', allowlistSource)
+    res.setHeader('X-PK-Allowlist-Count', String(allowlist?.length || 0))
     // Use GNews-only providers
     const providers = getProvidersForPKTop()
     const flightKey = `pk:${country}:${String(pageNum)}:${String(pageSizeNum)}:pt:${
