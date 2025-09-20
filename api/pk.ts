@@ -19,10 +19,16 @@ import {
 } from '../lib/_http.js'
 import { withHttpMetrics } from '../lib/_httpMetrics.js'
 import { isPkAboutGnewsSearchFallbackEnabled, isPkSoft429Enabled } from '../lib/_env.js'
+import { getPkAllowlist, isHostInAllowlist } from '../lib/pkAllowlist.js'
 
 export default withHttpMetrics(async function handler(req: any, res: any) {
   cors(res)
   if (req.method === 'OPTIONS') return res.status(204).end()
+  // Load PK allowlist (KV-backed) once per request; cached in-memory inside helper
+  let allowlist: string[] = []
+  try {
+    allowlist = await getPkAllowlist()
+  } catch {}
   // Minimal rate limiting: 60 req / 60s per IP
   try {
     const RL_ENABLED = String(process.env.RL_ENABLED || '1') === '1'
@@ -165,8 +171,7 @@ export default withHttpMetrics(async function handler(req: any, res: any) {
               .replace(/^www\./, '')
             const tld = getTld(h)
             if (tld === 'pk') return 'PK'
-            const knownPK = new Set(['brecorder.com', 'thefridaytimes.com'])
-            if (knownPK.has(h)) return 'PK'
+            if (isHostInAllowlist(h, allowlist)) return 'PK'
             return undefined
           }
           function detectCountriesFromText(title = '', summary = ''): string[] {
@@ -331,8 +336,7 @@ export default withHttpMetrics(async function handler(req: any, res: any) {
         .replace(/^www\./, '')
       const tld = getTld(h)
       if (tld === 'pk') return 'PK'
-      const knownPK = new Set(['brecorder.com', 'thefridaytimes.com'])
-      if (knownPK.has(h)) return 'PK'
+      if (isHostInAllowlist(h, allowlist)) return 'PK'
       return undefined
     }
     function detectCountriesFromText(title = '', summary = ''): string[] {
@@ -504,8 +508,7 @@ export default withHttpMetrics(async function handler(req: any, res: any) {
           .replace(/^www\./, '')
         const tld = getTld(h)
         if (tld === 'pk') return 'PK'
-        const knownPK = new Set(['brecorder.com', 'thefridaytimes.com'])
-        if (knownPK.has(h)) return 'PK'
+        if (isHostInAllowlist(h, allowlist)) return 'PK'
         return undefined
       }
       function detectCountriesFromText(title = '', summary = ''): string[] {
