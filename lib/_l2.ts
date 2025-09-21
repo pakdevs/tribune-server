@@ -10,7 +10,7 @@ const KEY_PREFIX = String(process.env.CACHE_KEY_PREFIX || '')
 const DISABLE_KV = String(process.env.L2_DISABLE_KV || '0') === '1'
 const TTL_MULT_ENV = parseInt(String(process.env.L2_TTL_MULT || ''), 10)
 const TTL_MULT =
-  Number.isFinite(TTL_MULT_ENV) && TTL_MULT_ENV >= 1 && TTL_MULT_ENV <= 10 ? TTL_MULT_ENV : 2
+  Number.isFinite(TTL_MULT_ENV) && TTL_MULT_ENV >= 1 && TTL_MULT_ENV <= 10 ? TTL_MULT_ENV : 10
 
 function applyPrefix(key: string) {
   return KEY_PREFIX ? KEY_PREFIX + key : key
