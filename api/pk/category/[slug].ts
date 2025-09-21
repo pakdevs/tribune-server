@@ -1,4 +1,5 @@
 import { normalize } from '../../../lib/_normalize.js'
+import { getPkAllowlistMeta, isHostInAllowlist } from '../../../lib/pkAllowlist.js'
 import { cors, cache, upstreamJson, addCacheDebugHeaders } from '../../../lib/_shared.js'
 import { withHttpMetrics } from '../../../lib/_httpMetrics.js'
 import {
@@ -40,6 +41,8 @@ async function handler(req: any, res: any) {
 
   const page = String(req.query.page || '1')
   const pageSize = String(req.query.pageSize || req.query.limit || '10')
+  // Scoping: union (default), from, about
+  const scope = String(req.query.scope || 'union')
   // Optional filters: domains, sources
   const domains = String(req.query.domains || '')
     .split(',')
@@ -50,12 +53,21 @@ async function handler(req: any, res: any) {
     .map((s) => s.trim())
     .filter(Boolean)
   const country = 'pk'
+  // Load PK allowlist once per request (seed-only in this build)
+  let allowlist: string[] = []
+  let allowlistSource = 'seed'
+  try {
+    const meta = await getPkAllowlistMeta()
+    allowlist = meta.list
+    allowlistSource = meta.source || 'seed'
+  } catch {}
   try {
     const cacheKey = buildCacheKey('pk-cat', {
       category,
       country,
       page: parseInt(page, 10),
       pageSize: parseInt(pageSize, 10),
+      scope,
       domains,
       sources,
     })
@@ -71,6 +83,9 @@ async function handler(req: any, res: any) {
       const fresh = getFresh(cacheKey) || (await getFreshOrL2(cacheKey))
       if (fresh) {
         res.setHeader('X-Cache', 'HIT')
+        res.setHeader('X-PK-Scope', scope)
+        res.setHeader('X-PK-Allowlist-Source', allowlistSource)
+        res.setHeader('X-PK-Allowlist-Count', String(allowlist?.length || 0))
         res.setHeader('X-Provider', fresh.meta.provider)
         res.setHeader('X-Provider-Attempts', fresh.meta.attempts.join(','))
         if (fresh.meta.attemptsDetail)
@@ -84,6 +99,9 @@ async function handler(req: any, res: any) {
     }
     //
     res.setHeader('X-Cache', 'MISS')
+    res.setHeader('X-PK-Scope', scope)
+    res.setHeader('X-PK-Allowlist-Source', allowlistSource)
+    res.setHeader('X-PK-Allowlist-Count', String(allowlist?.length || 0))
     // Use GNews-only providers
     const providers = getProvidersForPK()
     const result = await tryProvidersSequential(
@@ -92,7 +110,67 @@ async function handler(req: any, res: any) {
       { page, pageSize, country, category, domains, sources, q: category },
       (url, headers) => upstreamJson(url, headers)
     )
-    const normalized = result.items.map(normalize).filter(Boolean)
+    // Normalize and compute PK flags
+    function getTld(host = '') {
+      const h = String(host || '').toLowerCase()
+      const parts = h.split('.')
+      return parts.length >= 2 ? parts.slice(-1)[0] : ''
+    }
+    function inferSourceCountryFromDomain(host = ''): string | undefined {
+      const h = String(host || '')
+        .toLowerCase()
+        .replace(/^www\./, '')
+      const tld = getTld(h)
+      if (tld === 'pk') return 'PK'
+      if (isHostInAllowlist(h, allowlist)) return 'PK'
+      return undefined
+    }
+    function detectCountriesFromText(title = '', summary = ''): string[] {
+      const text = `${title} ${summary}`.toLowerCase()
+      const hits = new Set<string>()
+      const pkTerms = [
+        'pakistan',
+        'pakistani',
+        'islamabad',
+        'lahore',
+        'karachi',
+        'peshawar',
+        'rawalpindi',
+        'balochistan',
+        'sindh',
+        'punjab',
+        'kpk',
+        'gilgit-baltistan',
+        'azad kashmir',
+        'pak rupee',
+        'pak govt',
+      ]
+      for (const term of pkTerms) {
+        if (text.includes(term)) hits.add('PK')
+      }
+      return Array.from(hits)
+    }
+    function ensureFlags(n: any) {
+      const host = String(n.sourceDomain || '')
+      const country2 = inferSourceCountryFromDomain(host)
+      n.sourceCountry = country2
+      n.isFromPK = country2 === 'PK'
+      if (!Array.isArray(n.mentionsCountries) || typeof n.isAboutPK !== 'boolean') {
+        const arr = detectCountriesFromText(n.title || '', n.summary || '')
+        n.mentionsCountries = arr
+        n.isAboutPK = arr.includes('PK')
+      }
+      return n
+    }
+    let normalized = result.items.map(normalize).filter(Boolean).map(ensureFlags)
+    // Apply scope filtering
+    if (scope === 'from') {
+      normalized = normalized.filter((n: any) => n.isFromPK)
+    } else if (scope === 'about') {
+      normalized = normalized.filter((n: any) => n.isAboutPK && !n.isFromPK)
+    } else if (scope === 'union') {
+      normalized = normalized.filter((n: any) => n.isFromPK || n.isAboutPK)
+    }
     res.setHeader('X-Provider', result.provider)
     res.setHeader('X-Provider-Attempts', result.attempts?.join(',') || result.provider)
     if (result.attemptsDetail)
@@ -120,6 +198,7 @@ async function handler(req: any, res: any) {
           attemptsDetail: result.attemptsDetail,
           cacheKey,
           noCache,
+          scope,
           category,
           domains,
           sources,
