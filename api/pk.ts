@@ -75,18 +75,40 @@ export default withHttpMetrics(async function handler(req: any, res: any) {
     .filter(Boolean)
   const q = String(req.query.q || '').trim()
   try {
-    const cacheKey = buildCacheKey('pk-top', {
+    // Build scope-specific key and a canonical mixed key to allow sharing for "from" scope
+    const baseKeyParts = {
       country,
-      scope,
       page: pageNum,
       pageSize: pageSizeNum,
       pageToken,
       domains,
       sources,
       q: q || undefined,
-    })
+    }
+    const cacheKey = buildCacheKey('pk-top', { ...baseKeyParts, scope })
+    const mixedKey = buildCacheKey('pk-top', { ...baseKeyParts, scope: 'mixed' })
     const noCache = String(req.query.nocache || '0') === '1'
     if (!noCache) {
+      // Optimization: for scope=from, try to serve from the canonical mixed cache to avoid a duplicate upstream call
+      if (scope === 'from') {
+        const freshMixed = getFresh(mixedKey) || (await getFreshOrL2(mixedKey))
+        if (freshMixed) {
+          const items = (freshMixed.items || []).filter((n: any) => n?.isFromPK)
+          res.setHeader('X-Cache', 'HIT')
+          res.setHeader('X-PK-Scope', scope)
+          res.setHeader('X-PK-Allowlist-Source', allowlistSource)
+          res.setHeader('X-PK-Allowlist-Count', String(allowlist?.length || 0))
+          res.setHeader('X-Provider', freshMixed.meta.provider)
+          res.setHeader('X-Provider-Attempts', freshMixed.meta.attempts.join(','))
+          if (freshMixed.meta.attemptsDetail)
+            res.setHeader('X-Provider-Attempts-Detail', freshMixed.meta.attemptsDetail.join(','))
+          res.setHeader('X-Provider-Articles', String(items.length))
+          if (!getFresh(mixedKey)) res.setHeader('X-Cache-L2', '1')
+          cache(res, 300, 60)
+          await addCacheDebugHeaders(res, req)
+          return res.status(200).json({ items })
+        }
+      }
       const fresh = getFresh(cacheKey) || (await getFreshOrL2(cacheKey))
       if (fresh) {
         res.setHeader('X-Cache', 'HIT')
@@ -330,7 +352,9 @@ export default withHttpMetrics(async function handler(req: any, res: any) {
       )
     }
     const result = await flight
-    let normalized = result.items.map(normalize).filter(Boolean)
+    // Normalize once (canonical set), then derive scope-specific views without refetching
+    const allNormalized = result.items.map(normalize).filter(Boolean)
+    let normalized = allNormalized.slice()
     // Compute/fallback flags if missing
     function getTld(host = '') {
       const h = String(host || '').toLowerCase()
@@ -446,21 +470,30 @@ export default withHttpMetrics(async function handler(req: any, res: any) {
     res.setHeader('X-Provider-Articles', String(normalized.length))
     if (scope === 'from') res.setHeader('X-PK-Enforced-Country', 'PK')
     // Budget usage header removed (single-provider)
-    const cachePayload: any = {
-      items: normalized,
+    // Write canonical mixed payload for reuse by other scopes
+    const canonicalPayload: any = {
+      items: allNormalized,
       meta: {
         provider: result.provider,
         attempts: result.attempts || [result.provider],
         attemptsDetail: result.attemptsDetail,
       },
     }
-    attachEntityMeta(cachePayload)
-    setCache(cacheKey, cachePayload)
+    attachEntityMeta(canonicalPayload)
+    setCache(mixedKey, canonicalPayload)
+    // Also write the scope-specific payload (backwards-compat behavior)
+    const scopedPayload: any = {
+      items: normalized,
+      meta: canonicalPayload.meta,
+    }
+    attachEntityMeta(scopedPayload)
+    setCache(cacheKey, scopedPayload)
     // Schedule background revalidation for subsequent near-expiry windows
-    maybeScheduleRevalidate(cacheKey, async () => {
+    // Revalidate using canonical mixed key (always PK-scoped) to refresh the shared payload once
+    maybeScheduleRevalidate(mixedKey, async () => {
       const providers = getProvidersForPKTop()
       const enforcedQ = q
-      const countryForCalls = scope === 'about' ? undefined : country
+      const countryForCalls = country // keep PK for canonical
       const result2 = await tryProvidersSequential(
         providers,
         'top',
@@ -471,38 +504,13 @@ export default withHttpMetrics(async function handler(req: any, res: any) {
           domains,
           sources,
           q: enforcedQ,
-          pinQ: scope === 'from',
+          pinQ: false,
           pageToken,
         },
         (url, headers) => upstreamJson(url, headers)
       )
       let items2 = result2.items
-      if (
-        scope === 'about' &&
-        isPkAboutGnewsSearchFallbackEnabled() &&
-        Array.isArray(items2) &&
-        items2.length === 0
-      ) {
-        const gnewsOnly = providers.filter((p: any) => p.type === 'gnews')
-        if (gnewsOnly.length) {
-          try {
-            const alt = await tryProvidersSequential(
-              gnewsOnly,
-              'search',
-              {
-                page: pageNum,
-                pageSize: pageSizeNum,
-                country: undefined,
-                q: 'Pakistan',
-                domains: [],
-                sources: [],
-              },
-              (url, headers) => upstreamJson(url, headers)
-            )
-            items2 = alt.items
-          } catch {}
-        }
-      }
+      // Produce canonical (all) normalized list; consumers filter per-scope
       let normalized2 = (items2 || []).map(normalize).filter(Boolean)
       function getTld(host = '') {
         const h = String(host || '').toLowerCase()
@@ -578,9 +586,7 @@ export default withHttpMetrics(async function handler(req: any, res: any) {
         })
       }
       normalized2 = normalized2.map(ensureFlags)
-      if (scope === 'from') normalized2 = normalized2.filter((n: any) => n.isFromPK)
-      else if (scope === 'about')
-        normalized2 = normalized2.filter((n: any) => n.isAboutPK && !n.isFromPK)
+      // Rank/dedupe canonical list once; per-scope filtering is applied at read time
       normalized2 = dedupe(rank(normalized2))
       if (String(process.env.FEATURE_TITLE_DEDUPE || '1') === '1') {
         const { dedupeByTitle } = await import('./_dedupe.js')
@@ -596,7 +602,7 @@ export default withHttpMetrics(async function handler(req: any, res: any) {
       }
     })
     cache(res, 300, 60)
-    const entityMeta = extractEntityMeta(cachePayload)
+    const entityMeta = extractEntityMeta(scopedPayload)
     if (String(req.query.debug) === '1') {
       await addCacheDebugHeaders(res, req)
       if (entityMeta) {

@@ -62,15 +62,17 @@ async function handler(req: any, res: any) {
     allowlistSource = meta.source || 'seed'
   } catch {}
   try {
-    const cacheKey = buildCacheKey('pk-cat', {
+    const baseKeyParts = {
       category,
       country,
       page: parseInt(page, 10),
       pageSize: parseInt(pageSize, 10),
-      scope,
       domains,
       sources,
-    })
+    }
+    const cacheKey = buildCacheKey('pk-cat', { ...baseKeyParts, scope })
+    const unionKey = buildCacheKey('pk-cat', { ...baseKeyParts, scope: 'union' })
+    const aboutCanonKey = buildCacheKey('pk-cat', { ...baseKeyParts, scope: 'about-all' })
     const noCache = String(req.query.nocache || '0') === '1'
     if (!noCache) {
       const any = getAny(cacheKey)
@@ -79,6 +81,47 @@ async function handler(req: any, res: any) {
         cache(res, 30, 30)
         await addCacheDebugHeaders(res, req)
         return res.status(200).json({ items: [], negative: true })
+      }
+      // Try canonical caches first to avoid extra upstream calls across scopes
+      if (scope === 'about') {
+        const freshAbout = getFresh(aboutCanonKey) || (await getFreshOrL2(aboutCanonKey))
+        if (freshAbout) {
+          let items = freshAbout.items || []
+          items = items.filter((n: any) => n?.isAboutPK && !n?.isFromPK)
+          res.setHeader('X-Cache', 'HIT')
+          res.setHeader('X-PK-Scope', scope)
+          res.setHeader('X-PK-Allowlist-Source', allowlistSource)
+          res.setHeader('X-PK-Allowlist-Count', String(allowlist?.length || 0))
+          res.setHeader('X-Provider', freshAbout.meta.provider)
+          res.setHeader('X-Provider-Attempts', freshAbout.meta.attempts.join(','))
+          if (freshAbout.meta.attemptsDetail)
+            res.setHeader('X-Provider-Attempts-Detail', freshAbout.meta.attemptsDetail.join(','))
+          res.setHeader('X-Provider-Articles', String(items.length))
+          if (!getFresh(aboutCanonKey)) res.setHeader('X-Cache-L2', '1')
+          cache(res, 300, 60)
+          await addCacheDebugHeaders(res, req)
+          return res.status(200).json({ items })
+        }
+      } else {
+        const freshUnion = getFresh(unionKey) || (await getFreshOrL2(unionKey))
+        if (freshUnion) {
+          let items = freshUnion.items || []
+          if (scope === 'from') items = items.filter((n: any) => n?.isFromPK)
+          else if (scope === 'union') items = items.filter((n: any) => n?.isFromPK || n?.isAboutPK)
+          res.setHeader('X-Cache', 'HIT')
+          res.setHeader('X-PK-Scope', scope)
+          res.setHeader('X-PK-Allowlist-Source', allowlistSource)
+          res.setHeader('X-PK-Allowlist-Count', String(allowlist?.length || 0))
+          res.setHeader('X-Provider', freshUnion.meta.provider)
+          res.setHeader('X-Provider-Attempts', freshUnion.meta.attempts.join(','))
+          if (freshUnion.meta.attemptsDetail)
+            res.setHeader('X-Provider-Attempts-Detail', freshUnion.meta.attemptsDetail.join(','))
+          res.setHeader('X-Provider-Articles', String(items.length))
+          if (!getFresh(unionKey)) res.setHeader('X-Cache-L2', '1')
+          cache(res, 300, 60)
+          await addCacheDebugHeaders(res, req)
+          return res.status(200).json({ items })
+        }
       }
       const fresh = getFresh(cacheKey) || (await getFreshOrL2(cacheKey))
       if (fresh) {
@@ -104,10 +147,11 @@ async function handler(req: any, res: any) {
     res.setHeader('X-PK-Allowlist-Count', String(allowlist?.length || 0))
     // Use GNews-only providers
     const providers = getProvidersForPK()
+    const countryForCalls = scope === 'about' ? undefined : country
     const result = await tryProvidersSequential(
       providers,
       'top',
-      { page, pageSize, country, category, domains, sources, q: category },
+      { page, pageSize, country: countryForCalls, category, domains, sources, q: category },
       (url, headers) => upstreamJson(url, headers)
     )
     // Normalize and compute PK flags
@@ -162,15 +206,13 @@ async function handler(req: any, res: any) {
       }
       return n
     }
-    let normalized = result.items.map(normalize).filter(Boolean).map(ensureFlags)
-    // Apply scope filtering
-    if (scope === 'from') {
-      normalized = normalized.filter((n: any) => n.isFromPK)
-    } else if (scope === 'about') {
-      normalized = normalized.filter((n: any) => n.isAboutPK && !n.isFromPK)
-    } else if (scope === 'union') {
-      normalized = normalized.filter((n: any) => n.isFromPK || n.isAboutPK)
-    }
+    const allNormalized = result.items.map(normalize).filter(Boolean).map(ensureFlags)
+    const normalized = ((): any[] => {
+      if (scope === 'from') return allNormalized.filter((n: any) => n.isFromPK)
+      if (scope === 'about') return allNormalized.filter((n: any) => n.isAboutPK && !n.isFromPK)
+      if (scope === 'union') return allNormalized.filter((n: any) => n.isFromPK || n.isAboutPK)
+      return allNormalized
+    })()
     res.setHeader('X-Provider', result.provider)
     res.setHeader('X-Provider-Attempts', result.attempts?.join(',') || result.provider)
     if (result.attemptsDetail)
@@ -178,6 +220,27 @@ async function handler(req: any, res: any) {
     if (domains.length) res.setHeader('X-PK-Domains', domains.join(','))
     if (sources.length) res.setHeader('X-PK-Sources', sources.join(','))
     res.setHeader('X-Provider-Articles', String(normalized.length))
+    // Write canonical payloads: union for from/union (PK), about-all for about (global)
+    if (scope === 'about') {
+      setCache(aboutCanonKey, {
+        items: allNormalized,
+        meta: {
+          provider: result.provider,
+          attempts: result.attempts || [result.provider],
+          attemptsDetail: result.attemptsDetail,
+        },
+      })
+    } else {
+      setCache(unionKey, {
+        items: allNormalized,
+        meta: {
+          provider: result.provider,
+          attempts: result.attempts || [result.provider],
+          attemptsDetail: result.attemptsDetail,
+        },
+      })
+    }
+    // Also write the scope-specific payload (compat)
     setCache(cacheKey, {
       items: normalized,
       meta: {

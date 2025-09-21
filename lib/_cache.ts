@@ -105,7 +105,8 @@ const metrics: CacheMetrics = {
 const ENV_FRESH = parseInt(String((process as any)?.env?.CACHE_FRESH_TTL || ''), 10)
 const ENV_STALE_EXTRA = parseInt(String((process as any)?.env?.CACHE_STALE_EXTRA || ''), 10)
 // Guardrails to avoid absurd values (fresh 5..1800s, staleExtra 0..7200s)
-const DEFAULT_FRESH = 90
+// Default fresh TTL: 10 minutes (600s)
+const DEFAULT_FRESH = 600
 const DEFAULT_STALE_EXTRA = 600
 const CONFIG_FRESH =
   Number.isFinite(ENV_FRESH) && ENV_FRESH >= 5 && ENV_FRESH <= 1800 ? ENV_FRESH : DEFAULT_FRESH
