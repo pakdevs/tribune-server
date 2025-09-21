@@ -205,12 +205,12 @@ export default withHttpMetrics(async function handler(req: any, res: any) {
             return Array.from(hits)
           }
           function ensureFlags(n: any) {
-            if (typeof n.isFromPK !== 'boolean') {
-              const host = String(n.sourceDomain || '')
-              const country2 = inferSourceCountryFromDomain(host)
-              n.sourceCountry = country2
-              n.isFromPK = country2 === 'PK'
-            }
+            // Always recompute source country and isFromPK using TLD + allowlist
+            const host = String(n.sourceDomain || '')
+            const country2 = inferSourceCountryFromDomain(host)
+            n.sourceCountry = country2
+            n.isFromPK = country2 === 'PK'
+            // Compute about flags if missing
             if (!Array.isArray(n.mentionsCountries) || typeof n.isAboutPK !== 'boolean') {
               const arr = detectCountriesFromText(n.title || '', n.summary || '')
               n.mentionsCountries = arr
@@ -372,12 +372,12 @@ export default withHttpMetrics(async function handler(req: any, res: any) {
       return Array.from(hits)
     }
     function ensureFlags(n: any) {
-      if (typeof n.isFromPK !== 'boolean') {
-        const host = String(n.sourceDomain || '')
-        const country = inferSourceCountryFromDomain(host)
-        n.sourceCountry = country
-        n.isFromPK = country === 'PK'
-      }
+      // Always recompute source country and isFromPK using TLD + allowlist
+      const host = String(n.sourceDomain || '')
+      const country = inferSourceCountryFromDomain(host)
+      n.sourceCountry = country
+      n.isFromPK = country === 'PK'
+      // Compute about flags if missing
       if (!Array.isArray(n.mentionsCountries) || typeof n.isAboutPK !== 'boolean') {
         const arr = detectCountriesFromText(n.title || '', n.summary || '')
         n.mentionsCountries = arr
@@ -544,12 +544,12 @@ export default withHttpMetrics(async function handler(req: any, res: any) {
         return Array.from(hits)
       }
       function ensureFlags(n: any) {
-        if (typeof n.isFromPK !== 'boolean') {
-          const host = String(n.sourceDomain || '')
-          const country2 = inferSourceCountryFromDomain(host)
-          n.sourceCountry = country2
-          n.isFromPK = country2 === 'PK'
-        }
+        // Always recompute source country and isFromPK using TLD + allowlist
+        const host = String(n.sourceDomain || '')
+        const country2 = inferSourceCountryFromDomain(host)
+        n.sourceCountry = country2
+        n.isFromPK = country2 === 'PK'
+        // Compute about flags if missing
         if (!Array.isArray(n.mentionsCountries) || typeof n.isAboutPK !== 'boolean') {
           const arr = detectCountriesFromText(n.title || '', n.summary || '')
           n.mentionsCountries = arr
