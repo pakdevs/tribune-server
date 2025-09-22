@@ -1,5 +1,5 @@
 import { normalize } from '../lib/_normalize.js'
-import { dedupeByTitle } from '../lib/_dedupe.js'
+import { dedupeByTitle, dedupeByCanonicalUrl } from '../lib/_dedupe.js'
 import { cors, cache, upstreamJson, addCacheDebugHeaders } from '../lib/_shared.js'
 import { getFresh, getStale, setCache, getFreshOrL2 } from '../lib/_cache.js'
 import { maybeScheduleRevalidate } from '../lib/_revalidate.js'
@@ -265,6 +265,8 @@ export default withHttpMetrics(async function handler(req: any, res: any) {
           else if (scope === 'about')
             normalized2 = normalized2.filter((n: any) => n.isAboutPK && !n.isFromPK)
           normalized2 = dedupe(rank(normalized2))
+          // Collapse URL slug variants by numeric id ahead of title similarity
+          normalized2 = dedupeByCanonicalUrl(normalized2)
           if (String(process.env.FEATURE_TITLE_DEDUPE || '1') === '1') {
             const { dedupeByTitle } = await import('./_dedupe.js')
             normalized2 = dedupeByTitle(normalized2, 0.9)
@@ -435,6 +437,8 @@ export default withHttpMetrics(async function handler(req: any, res: any) {
       normalized = normalized.filter((n: any) => n.isAboutPK && !n.isFromPK)
     const preCount = normalized.length
     normalized = dedupe(rank(normalized))
+    // Collapse URL slug variants by numeric id ahead of title similarity
+    normalized = dedupeByCanonicalUrl(normalized)
     if (String(process.env.FEATURE_TITLE_DEDUPE || '1') === '1') {
       normalized = dedupeByTitle(normalized, 0.9)
     }
@@ -588,6 +592,8 @@ export default withHttpMetrics(async function handler(req: any, res: any) {
       normalized2 = normalized2.map(ensureFlags)
       // Rank/dedupe canonical list once; per-scope filtering is applied at read time
       normalized2 = dedupe(rank(normalized2))
+      // Collapse URL slug variants by numeric id ahead of title similarity
+      normalized2 = dedupeByCanonicalUrl(normalized2)
       if (String(process.env.FEATURE_TITLE_DEDUPE || '1') === '1') {
         const { dedupeByTitle } = await import('./_dedupe.js')
         normalized2 = dedupeByTitle(normalized2, 0.9)
