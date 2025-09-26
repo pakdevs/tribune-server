@@ -85,24 +85,36 @@ async function handler(req: any, res: any) {
       // Try union canonical cache first (shared for 'from' and 'union')
       if (scope !== 'about') {
         const freshUnion = getFresh(unionKey) || (await getFreshOrL2(unionKey))
-        if (freshUnion) {
-          let items = freshUnion.items || []
+        let unionItems: any[] | null = null
+        if (freshUnion) unionItems = freshUnion.items || []
+        // If union missing or empty, try to compose from cached 'about' scope too
+        if (!unionItems || unionItems.length === 0) {
+          const aboutKey = buildCacheKey('pk-cat', { ...baseKeyParts, scope: 'about' })
+          const cachedAbout = getFresh(aboutKey) || (await getFreshOrL2(aboutKey))
+          if (cachedAbout && cachedAbout.items?.length) {
+            unionItems = [
+              ...(unionItems || []),
+              ...cachedAbout.items.filter((n: any) => n?.isAboutPK && !n?.isFromPK),
+            ]
+          }
+        }
+        if (unionItems && unionItems.length) {
+          let items = unionItems
           if (scope === 'from') items = items.filter((n: any) => n?.isFromPK)
           else if (scope === 'union') items = items.filter((n: any) => n?.isFromPK || n?.isAboutPK)
           res.setHeader('X-Cache', 'HIT')
           res.setHeader('X-PK-Scope', scope)
           res.setHeader('X-PK-Allowlist-Source', allowlistSource)
           res.setHeader('X-PK-Allowlist-Count', String(allowlist?.length || 0))
-          res.setHeader('X-Provider', freshUnion.meta.provider)
-          res.setHeader('X-Provider-Attempts', freshUnion.meta.attempts.join(','))
-          if (freshUnion.meta.attemptsDetail)
-            res.setHeader('X-Provider-Attempts-Detail', freshUnion.meta.attemptsDetail.join(','))
-          res.setHeader('X-Provider-Articles', String(items.length))
-          if (!getFresh(unionKey)) {
-            res.setHeader('X-Cache-Tier', 'L2')
-          } else {
-            res.setHeader('X-Cache-Tier', 'L1')
+          // Provider headers from union cache if present
+          if (freshUnion?.meta) {
+            res.setHeader('X-Provider', freshUnion.meta.provider)
+            res.setHeader('X-Provider-Attempts', freshUnion.meta.attempts.join(','))
+            if (freshUnion.meta.attemptsDetail)
+              res.setHeader('X-Provider-Attempts-Detail', freshUnion.meta.attemptsDetail.join(','))
           }
+          res.setHeader('X-Provider-Articles', String(items.length))
+          res.setHeader('X-Cache-Tier', getFresh(unionKey) ? 'L1' : 'L2')
           cache(res, 300, 60)
           await addCacheDebugHeaders(res, req)
           return res.status(200).json({ items })
@@ -136,26 +148,61 @@ async function handler(req: any, res: any) {
     res.setHeader('X-PK-Allowlist-Count', String(allowlist?.length || 0))
     // Use GNews-only providers
     const providers = getProvidersForPK()
-    // Determine provider intent + query for about scope (use search endpoint with expanded PK terms)
+    // Composite fetch: when scope=union, fetch both top(category) and about-search in parallel
     const isAbout = scope === 'about'
-    const aboutQuery = isAbout ? `${category} ${buildPakistanOrQuery(8)}`.trim() : category
-    const providerIntent = isAbout ? 'search' : 'top'
-    const countryForCalls = scope === 'about' ? undefined : country
-    const result = await tryProvidersSequential(
-      providers,
-      providerIntent as any,
-      {
-        page,
-        pageSize,
-        country: countryForCalls,
-        category,
-        domains,
-        sources,
-        q: aboutQuery,
-        pinQ: isAbout, // keep query intact for about search variants
-      },
-      (url, headers) => upstreamJson(url, headers)
-    )
+    const aboutQuery = `${category} ${buildPakistanOrQuery(8)}`.trim()
+    const countryForCalls = isAbout ? undefined : country
+    const result = await (async () => {
+      if (scope === 'union') {
+        const [topRes, aboutRes] = await Promise.all([
+          tryProvidersSequential(
+            providers,
+            'top' as any,
+            { page, pageSize, country, category, domains, sources },
+            (url, headers) => upstreamJson(url, headers)
+          ),
+          tryProvidersSequential(
+            providers,
+            'search' as any,
+            {
+              page,
+              pageSize,
+              country: undefined,
+              category,
+              domains,
+              sources,
+              q: aboutQuery,
+              pinQ: true,
+            },
+            (url, headers) => upstreamJson(url, headers)
+          ),
+        ])
+        return {
+          items: [...(topRes?.items || []), ...(aboutRes?.items || [])],
+          provider: topRes?.provider || aboutRes?.provider,
+          attempts: (topRes?.attempts || []).concat(aboutRes?.attempts || []),
+          attemptsDetail: (topRes?.attemptsDetail || []).concat(aboutRes?.attemptsDetail || []),
+          url: `${topRes?.url || ''} || ${aboutRes?.url || ''}`,
+        }
+      }
+      // from/about specific single intent
+      const intent = isAbout ? 'search' : 'top'
+      return tryProvidersSequential(
+        providers,
+        intent as any,
+        {
+          page,
+          pageSize,
+          country: countryForCalls,
+          category,
+          domains,
+          sources,
+          q: isAbout ? aboutQuery : category,
+          pinQ: isAbout,
+        },
+        (url, headers) => upstreamJson(url, headers)
+      )
+    })()
     // Normalize and compute PK flags
     function getTld(host = '') {
       const h = String(host || '').toLowerCase()
@@ -205,7 +252,7 @@ async function handler(req: any, res: any) {
     if (domains.length) res.setHeader('X-PK-Domains', domains.join(','))
     if (sources.length) res.setHeader('X-PK-Sources', sources.join(','))
     res.setHeader('X-Provider-Articles', String(normalized.length))
-    // Write canonical payload for union scope reuse (only for non-about scopes)
+    // Write canonical payload for union scope reuse
     if (scope !== 'about') {
       setCache(unionKey, {
         items: allNormalized,
