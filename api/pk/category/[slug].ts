@@ -72,7 +72,7 @@ async function handler(req: any, res: any) {
     }
     const cacheKey = buildCacheKey('pk-cat', { ...baseKeyParts, scope })
     const unionKey = buildCacheKey('pk-cat', { ...baseKeyParts, scope: 'union' })
-    const aboutCanonKey = buildCacheKey('pk-cat', { ...baseKeyParts, scope: 'about-all' })
+    // Removed: separate about-all canonical key (no longer needed since about scope is standalone)
     const noCache = String(req.query.nocache || '0') === '1'
     if (!noCache) {
       const any = getAny(cacheKey)
@@ -82,31 +82,8 @@ async function handler(req: any, res: any) {
         await addCacheDebugHeaders(res, req)
         return res.status(200).json({ items: [], negative: true })
       }
-      // Try canonical caches first to avoid extra upstream calls across scopes
-      if (scope === 'about') {
-        const freshAbout = getFresh(aboutCanonKey) || (await getFreshOrL2(aboutCanonKey))
-        if (freshAbout) {
-          let items = freshAbout.items || []
-          items = items.filter((n: any) => n?.isAboutPK && !n?.isFromPK)
-          res.setHeader('X-Cache', 'HIT')
-          res.setHeader('X-PK-Scope', scope)
-          res.setHeader('X-PK-Allowlist-Source', allowlistSource)
-          res.setHeader('X-PK-Allowlist-Count', String(allowlist?.length || 0))
-          res.setHeader('X-Provider', freshAbout.meta.provider)
-          res.setHeader('X-Provider-Attempts', freshAbout.meta.attempts.join(','))
-          if (freshAbout.meta.attemptsDetail)
-            res.setHeader('X-Provider-Attempts-Detail', freshAbout.meta.attemptsDetail.join(','))
-          res.setHeader('X-Provider-Articles', String(items.length))
-          if (!getFresh(aboutCanonKey)) {
-            res.setHeader('X-Cache-Tier', 'L2')
-          } else {
-            res.setHeader('X-Cache-Tier', 'L1')
-          }
-          cache(res, 300, 60)
-          await addCacheDebugHeaders(res, req)
-          return res.status(200).json({ items })
-        }
-      } else {
+      // Try union canonical cache first (shared for 'from' and 'union')
+      if (scope !== 'about') {
         const freshUnion = getFresh(unionKey) || (await getFreshOrL2(unionKey))
         if (freshUnion) {
           let items = freshUnion.items || []
@@ -228,17 +205,8 @@ async function handler(req: any, res: any) {
     if (domains.length) res.setHeader('X-PK-Domains', domains.join(','))
     if (sources.length) res.setHeader('X-PK-Sources', sources.join(','))
     res.setHeader('X-Provider-Articles', String(normalized.length))
-    // Write canonical payloads: union for from/union (PK), about-all for about (global)
-    if (scope === 'about') {
-      setCache(aboutCanonKey, {
-        items: allNormalized,
-        meta: {
-          provider: result.provider,
-          attempts: result.attempts || [result.provider],
-          attemptsDetail: result.attemptsDetail,
-        },
-      })
-    } else {
+    // Write canonical payload for union scope reuse (only for non-about scopes)
+    if (scope !== 'about') {
       setCache(unionKey, {
         items: allNormalized,
         meta: {

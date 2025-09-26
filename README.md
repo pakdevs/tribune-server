@@ -99,14 +99,15 @@ PK endpoints use `country=pk` and support optional filters:
   - Uses GNews top-headlines (`country=pk`).
 
 - `scope=about` (foreign coverage about Pakistan):
-  - No country pin (global coverage). Post-normalization, PK-origin sources are excluded, keeping only foreign outlets that mention Pakistan.
-  - If the feed is empty and `PK_ABOUT_GNEWS_SEARCH_FALLBACK=1`, the server will try GNews Search with `q=Pakistan` (no country) as a last resort.
+  - Always uses GNews Search (global, no `country` parameter) with an expanded OR keyword expression built from a curated list of Pakistan terms (cities, regions, finance, politics, security).
+  - Post-normalization, PK-origin sources are excluded so the feed shows only foreign coverage about Pakistan.
+  - Expression example (truncated): `(pakistan OR "imran khan" OR karachi OR lahore OR "state bank" OR imf ...)`.
+  - A length guard trims the tail of the term list if the encoded query would exceed ~1700 characters (keeps URLs safely <2KB).
   - Headers still surface provider attempts in `X-Provider-Attempts` and `X-Provider-Attempts-Detail` (enable `?debug=1`).
+  - The former `about-all` canonical cache layer was removed (results are not reused across any other scope); each category about request is cached directly under its own key.
 
 Optional behaviors (flags):
 
-- `PK_ABOUT_GNEWS_SEARCH_FALLBACK=1`
-  - Enables GNews Search fallback for `scope=about` when top-headlines return empty. Uses `q=Pakistan` without a country constraint.
 - `PK_SOFT_429=1`
   - When upstream returns 429 and there is no stale cache, the server responds with `200 { items: [], rateLimited: true }` and header `X-Soft-429: 1` instead of a hard 429. This prevents hard failures in the UI during temporary rate-limit windows. Respect `Retry-After` when present.
 

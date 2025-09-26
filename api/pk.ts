@@ -17,7 +17,7 @@ import {
   isNotModified,
   attachEntityMeta,
 } from '../lib/_http.js'
-import { isPkAboutGnewsSearchFallbackEnabled, isPkSoft429Enabled } from '../lib/_env.js'
+import { isPkSoft429Enabled } from '../lib/_env.js'
 import { PK_TERMS, buildPakistanOrQuery } from '../lib/pkTerms.js'
 import { getPkAllowlist, getPkAllowlistMeta, isHostInAllowlist } from '../lib/pkAllowlist.js'
 

@@ -42,12 +42,6 @@ export function isBreakerEnabled(): boolean {
 }
 
 // Feature flag: allow GNews /search fallback for PK "about" scope when top-headlines return nothing
-export function isPkAboutGnewsSearchFallbackEnabled(): boolean {
-  const v = (process as any).env.PK_ABOUT_GNEWS_SEARCH_FALLBACK
-  if (v === undefined) return false
-  const s = String(v).trim().toLowerCase()
-  return s === '1' || s === 'true' || s === 'yes'
-}
 
 // Feature flag: when upstream returns 429 and no stale cache exists,
 // respond with 200 + empty items and a hint header instead of passing 429 through.
