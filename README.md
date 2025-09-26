@@ -7,18 +7,18 @@ Production-focused serverless API aggregator providing normalized news articles 
 | Purpose               | Route                            | Notes                                                                        |
 | --------------------- | -------------------------------- | ---------------------------------------------------------------------------- |
 | World mixed headlines | `GET /api/world`                 | Backed by GNews (country/category filters mapped to topics)                  |
-| Pakistan headlines    | `GET /api/pk`                    | Backed by GNews (country=pk; scope=from/about behavior as documented)        |
+| Pakistan headlines    | `GET /api/pk`                    | Backed by GNews (country=pk; scope=from/about; see details below)            |
 | World category        | `GET /api/world/category/{slug}` | Slugs: business, entertainment, general, health, science, sports, technology |
-| Pakistan category     | `GET /api/pk/category/{slug}`    | Same slug set; fallback logic applies                                        |
+| Pakistan category     | `GET /api/pk/category/{slug}`    | Same slug set; “All” = From ∪ About union (merge+dedupe)                     |
 | Search (global)       | `GET /api/search?q=term`         | Backed by GNews Search                                                       |
 | Trending topics (new) | `GET /api/trending/topics`       | Returns `{ region, asOf, topics[] }` (KV/in-memory cached)                   |
 
 All successful responses: `{ items: Article[] }` (empty array if no matches). Errors: `{ error: string, message? }`.
 
-Deprecated endpoints removed (Hobby plan limits):
+Deprecated endpoints removed:
 
-- `/api/top` → use `/api/world` with category/country filters
-- `/api/stats` → use `/api/cacheMetrics` and `/api/metrics/rollup`
+- `/api/top` → use `/api/world`
+- `/api/stats` and `/api/metrics/*` (metrics subsystem removed)
 - `/api/feeds/about-pakistan` → use `/api/pk?scope=about`
 
 ### Deployment mapping (Vercel Hobby ≤ 12 functions)
@@ -26,7 +26,7 @@ Deprecated endpoints removed (Hobby plan limits):
 To stay within the Hobby plan function cap, we:
 
 - Moved shared helpers out of `api/` into `lib/` so they don't generate routes.
-- Added a `vercel.json` that explicitly maps only the intended routes: `world`, `pk`, `search`, `purge`, `cacheMetrics`, `metrics/**`, `trending/**` (and nested world/**, pk/** for categories).
+- Added a `vercel.json` that explicitly maps only the intended routes: `world`, `pk`, `search`, `purge`, `trending/**` (and nested world/**, pk/** for categories). Legacy metrics endpoints are not deployed.
 - Added a `.vercelignore` to exclude `api/_*.ts`, `api/**/_*.ts`, and deprecated endpoints from deployment.
 
 This ensures only the required functions are built and deployed.
@@ -104,7 +104,16 @@ PK endpoints use `country=pk` and support optional filters:
   - Expression example (truncated): `(pakistan OR "imran khan" OR karachi OR lahore OR "state bank" OR imf ...)`.
   - A length guard trims the tail of the term list if the encoded query would exceed ~1700 characters (keeps URLs safely <2KB).
   - Headers still surface provider attempts in `X-Provider-Attempts` and `X-Provider-Attempts-Detail` (enable `?debug=1`).
-  - The former `about-all` canonical cache layer was removed (results are not reused across any other scope); each category about request is cached directly under its own key.
+  - The former `about-all` canonical cache layer was removed; each category about request is cached directly under its own key.
+
+### Pakistan category union (All = From ∪ About)
+
+For Pakistan categories, the “All” scope is a composite union of:
+
+- From: top-headlines for category with country=pk (PK-origin sources)
+- About: global search for category combined with the Pakistan OR-term expression (foreign coverage about PK)
+
+On cold fetch, both requests run in parallel, results are merged and de-duplicated by article identity, and cached under the union key. On cached paths where union may be sparse, cached about results may be merged to ensure coverage. This avoids requiring users to click the “About” tab to see foreign coverage.
 
 Optional behaviors (flags):
 
@@ -121,6 +130,11 @@ Aliases accepted (mapped internally): `politics, world → general`, `tech → t
 - Cache: `s-maxage=300, stale-while-revalidate=60` (CDN layer) via `cache()` helper.
 - CORS: `*` (open). Adjust in `lib/_shared.ts` if you need to lock to your app domain.
 - Basic security headers added: `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options`, `Permissions-Policy`.
+
+Additional debug/diagnostic headers:
+
+- `X-Cache-Tier`: unified cache tier indicator (replaces legacy `X-Cache-L2`)
+- `X-Provider`, `X-Provider-Attempts`, `X-Provider-Articles`: basic provider observability (enable with `?debug=1`)
 
 ### HTTP Entity Validation (Phase 6)
 
@@ -177,22 +191,15 @@ Operational guidance:
 
 Future enhancements (not yet): per-field inclusion allowlist, partial diff endpoint, per-client validator negotiation.
 
-### Observability & Resilience (Phases 7–8)
+### Telemetry & debug
 
-- Durable metrics rollups (hourly): `GET /api/metrics/rollup?hours=6` (Bearer `METRICS_API_TOKEN` optional)
-- Cache and background stats: `GET /api/cacheMetrics` (now includes `breaker` and `budget` snapshots)
-- Circuit breaker: per-provider with exponential backoff
-- Budget guardrails: soft reserve to protect foreground traffic (`BUDGET_SOFT_REMAIN`)
+The previous custom metrics subsystem (rollups, histograms, SLOs) has been removed. Lightweight observability remains:
 
-Key envs (subset):
+- Debug headers described above (`?debug=1`)
+- Each cached payload persists `meta.url` (upstream provider URL) and `meta.cacheKey` to aid KV/Upstash inspections
+- Background revalidation remains enabled to keep hot keys fresh (see below)
 
-- `BREAKER_ENABLED`, `BREAKER_FAILURE_BURST`, `BREAKER_OPEN_MS`, `BREAKER_OPEN_MS_MAX`
-- `GNEWS_DAILY_LIMIT`, `GNEWS_CALL_COST`, `BUDGET_SOFT_REMAIN`
-- `METRICS_API_TOKEN` (read), `METRICS_PUSH_URL`/`METRICS_PUSH_TOKEN` (optional push)
-
-See `app/docs/server/implemented.md` → Phase 7 & 8 for full details.
-
-### Background Revalidation (Phase 4)
+### Background Revalidation
 
 Lightweight opportunistic background revalidation keeps hot keys fresh without adding latency to client responses.
 
@@ -231,96 +238,8 @@ Debug headers (when `debug=1`):
 | X-Reval-Adaptive-Baseline   | Number of baseline classifications              |
 | X-Reval-Adaptive-Suppressed | Scheduling suppressions (below min HPM)         |
 
-Structured log sample (every ~5m or 2000 lookups):
+Note: Former external metrics push and rollup docs were removed as those features are no longer present.
 
-```json
-{
-  "level": "info",
-  "msg": "cache-metrics",
-  "cache": {
-    "puts": 1234,
-    "hitsFresh": 1100,
-    "revalScheduled": 42,
-    "revalSuccess": 40,
-    "revalFail": 2,
-    "adaptiveHot": 8,
-    "adaptiveCold": 5,
-    "adaptiveBaseline": 20,
-    "adaptiveSuppressed": 12,
-    "metricsPushOk": 3,
-    "metricsPushFail": 0,
-    "metricsPushSuccessRatio": 1,
-    "adaptiveHotSample": [
-      { "key": "world|page=1", "emaHPM": 52.3 },
-      { "key": "pk|scope=about", "emaHPM": 37.1 }
-    ]
-  }
-}
-```
-
-Additional log fields:
-
-| Field                    | Meaning                                                           |
-| ------------------------ | ----------------------------------------------------------------- |
-| adaptiveHot / Cold / ... | Cumulative adaptive classification counters since cold start      |
-| metricsPushOk            | Successful external metrics POST attempts                         |
-| metricsPushFail          | Failed external metrics POST attempts                             |
-| metricsPushSuccessRatio  | ok / (ok + fail) (0 if no attempts yet)                           |
-| adaptiveHotSample        | Up to 3 hottest keys (key + EMA hits-per-minute) for quick triage |
-
-Interpretation Tips:
-
-- Adaptive Revalidation (Phase 4+ Enhancement)
-
-Adaptive mode tunes background refresh urgency per key based on recent hit frequency (EMA of hits-per-minute):
-
-Env Vars:
-
-| Var                          | Default | Description                                                  |
-| ---------------------------- | ------- | ------------------------------------------------------------ |
-| ADAPTIVE_REVAL_ENABLED       | 1       | Master switch for adaptive adjustments                       |
-| ADAPTIVE_MAX_KEYS            | 200     | Max tracked hot keys (older evicted)                         |
-| ADAPTIVE_EMA_ALPHA           | 0.2     | EMA smoothing factor (higher = more reactive)                |
-| ADAPTIVE_HOT_HPM             | 30      | HPM threshold to treat key as hot                            |
-| ADAPTIVE_COLD_HPM            | 2       | HPM threshold considered cold (below this reduces threshold) |
-| ADAPTIVE_HOT_FACTOR          | 2.0     | Multiplier applied to base threshold for hot keys            |
-| ADAPTIVE_COLD_FACTOR         | 0.5     | Multiplier for cold keys                                     |
-| ADAPTIVE_MIN_HPM_TO_SCHEDULE | 0.2     | Below this HPM, scheduling is suppressed                     |
-
-Endpoint: `GET /api/cacheMetrics` (returns cache, revalidation, adaptive samples). Protect with `METRICS_API_TOKEN` (Bearer) if set.
-
-External Push (optional):
-
-| Var                | Description                                                 |
-| ------------------ | ----------------------------------------------------------- |
-| METRICS_PUSH_URL   | HTTP(S) collector URL to POST periodic `cache-metrics` JSON |
-| METRICS_PUSH_TOKEN | Optional bearer token for push authorization                |
-
-Push payload sample:
-
-```json
-{
-  "ts": "2025-09-16T00:00:00.000Z",
-  "cache": {
-    "puts": 123,
-    "hitsFresh": 110,
-    "l2": { "hits": 20, "misses": 5 },
-    "reval": { "scheduled": 40 }
-  }
-}
-```
-
-Operational Guidelines:
-
-- Increase `ADAPTIVE_HOT_FACTOR` cautiously; high values can front-load upstream usage.
-- If many keys show low HPM and are suppressed, confirm clients aren’t churning random query params (key hygiene).
-- For bursty traffic, raise `ADAPTIVE_EMA_ALPHA` for quicker reaction; lower it for stability.
-- Monitor `revalScheduled` vs `revalSuccess` after tuning adaptive thresholds to ensure error rates don’t spike.
-
-- High `revalScheduled` with low `revalSuccess` → increase `BG_MIN_INTERVAL_MS` or investigate upstream errors.
-- Many `skippedMaxConcurrent` → raise `BG_MAX_INFLIGHT` cautiously (consider upstream rate limits).
-- Large `skippedFresh` relative to hits → threshold too high; lower `BG_REVALIDATE_FRESH_THRESHOLD_MS` for earlier refresh.
-- If `revalFail` spikes, rely on stale window while debugging upstream provider health.
 - Track `metricsPushOk` vs `metricsPushFail` (in `/api/cacheMetrics` response under `push`) to ensure external collector is healthy.
 
 ## Local Development
@@ -366,7 +285,7 @@ Notes:
 
 ## Future Enhancements (Not Yet Implemented)
 
-- Durable provider usage metrics (Redis / KV).
+- Lightweight usage sampling (if needed) without re-introducing heavy metrics.
 - On-demand media metadata endpoint (aspect ratio, blurhash).
 - Rate limiting (middleware).
 - Phase 5 (planned / now implementing): Adaptive Prefetch & Warming
@@ -379,24 +298,18 @@ Notes:
   - Metrics: prefetchScheduled / prefetchSuccess / prefetchFail / prefetchSkipped\* (reasons).
   - Fail-safe: if upstream errors exceed PREFETCH_ERROR_BURST (e.g., >3 fails in last window) suspend prefetch for a cooldown.
 
-### Observability (Phase 1 Implemented)
+### Observability (lightweight)
 
 Per-response headers:
 
 - `X-Provider`: provider that returned articles.
 - `X-Provider-Attempts`: ordered list of attempted providers.
 - `X-Provider-Articles`: number of normalized articles.
+- `X-Cache-Tier`: indicates which cache tier served the response.
 
-Ephemeral usage summary: `GET /api/stats`.
+## App Debug Aids
 
-## App Metrics Dashboard
-
-The mobile app includes a simple metrics dashboard screen (`app/app/metrics.tsx`) that consumes `/api/cacheMetrics` and `/api/metrics/rollup`. Configure:
-
-- `EXPO_PUBLIC_SERVER_BASE` – your deployed server URL
-- `EXPO_PUBLIC_METRICS_TOKEN` – optional bearer token for metrics endpoints
-
-This screen is not linked by default; you can add a dev-only entry point in Settings.
+For KV/Upstash inspection, cached payloads include `meta.url` (upstream URL) and `meta.cacheKey` alongside the item list. Use `?debug=1` to enable verbose headers during manual testing.
 
 ## Monorepo scripts (from repo root)
 
