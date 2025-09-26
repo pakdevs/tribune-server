@@ -389,6 +389,7 @@ export default async function handler(req: any, res: any) {
       meta: {
         provider: result.provider,
         url: result.url,
+        cacheKey: mixedKey,
         attempts: result.attempts || [result.provider],
         attemptsDetail: result.attemptsDetail,
       },
@@ -398,7 +399,7 @@ export default async function handler(req: any, res: any) {
     // Also write the scope-specific payload (backwards-compat behavior)
     const scopedPayload: any = {
       items: normalized,
-      meta: canonicalPayload.meta,
+      meta: { ...canonicalPayload.meta, cacheKey },
     }
     attachEntityMeta(scopedPayload)
     setCache(cacheKey, scopedPayload)
@@ -495,6 +496,8 @@ export default async function handler(req: any, res: any) {
         items: normalized2,
         meta: {
           provider: result2.provider,
+          url: result2.url,
+          cacheKey: mixedKey,
           attempts: result2.attempts || [result2.provider],
           attemptsDetail: result2.attemptsDetail,
         },
@@ -570,14 +573,13 @@ export default async function handler(req: any, res: any) {
         return res.status(200).json({ items: [], rateLimited: true })
       } else {
         if (ra) res.setHeader('Retry-After', String(ra))
-        return res
-          .status(429)
-          .json({ error: 'Rate limited', message: 'Upstream 429', retryAfter: ra || undefined })
+        if (String(req.query.debug) === '1') {
+          return res
+            .status(429)
+            .json({ error: 'Rate limited', message: 'Upstream 429', retryAfter: ra || undefined })
+        }
+        return res.status(429).json({ error: 'Rate limited' })
       }
     }
-    if (String(req.query.debug) === '1') {
-      return res.status(500).json({ error: 'Proxy failed', message: e?.message || String(e) })
-    }
-    return res.status(500).json({ error: 'Proxy failed' })
   }
 }

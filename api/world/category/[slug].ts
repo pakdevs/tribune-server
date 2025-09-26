@@ -117,6 +117,7 @@ async function handler(req: any, res: any) {
       meta: {
         provider: result.provider,
         url: result.url,
+        cacheKey,
         attempts: result.attempts || [result.provider],
         attemptsDetail: result.attemptsDetail,
       },
