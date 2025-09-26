@@ -1,7 +1,7 @@
 import { normalize } from '../../../lib/_normalize.js'
+import { PK_TERMS, buildPakistanOrQuery } from '../../../lib/pkTerms.js'
 import { getPkAllowlistMeta, isHostInAllowlist } from '../../../lib/pkAllowlist.js'
 import { cors, cache, upstreamJson, addCacheDebugHeaders } from '../../../lib/_shared.js'
-import { withHttpMetrics } from '../../../lib/_httpMetrics.js'
 import {
   getFresh,
   getStale,
@@ -97,7 +97,11 @@ async function handler(req: any, res: any) {
           if (freshAbout.meta.attemptsDetail)
             res.setHeader('X-Provider-Attempts-Detail', freshAbout.meta.attemptsDetail.join(','))
           res.setHeader('X-Provider-Articles', String(items.length))
-          if (!getFresh(aboutCanonKey)) res.setHeader('X-Cache-L2', '1')
+          if (!getFresh(aboutCanonKey)) {
+            res.setHeader('X-Cache-Tier', 'L2')
+          } else {
+            res.setHeader('X-Cache-Tier', 'L1')
+          }
           cache(res, 300, 60)
           await addCacheDebugHeaders(res, req)
           return res.status(200).json({ items })
@@ -117,7 +121,11 @@ async function handler(req: any, res: any) {
           if (freshUnion.meta.attemptsDetail)
             res.setHeader('X-Provider-Attempts-Detail', freshUnion.meta.attemptsDetail.join(','))
           res.setHeader('X-Provider-Articles', String(items.length))
-          if (!getFresh(unionKey)) res.setHeader('X-Cache-L2', '1')
+          if (!getFresh(unionKey)) {
+            res.setHeader('X-Cache-Tier', 'L2')
+          } else {
+            res.setHeader('X-Cache-Tier', 'L1')
+          }
           cache(res, 300, 60)
           await addCacheDebugHeaders(res, req)
           return res.status(200).json({ items })
@@ -134,7 +142,11 @@ async function handler(req: any, res: any) {
         if (fresh.meta.attemptsDetail)
           res.setHeader('X-Provider-Attempts-Detail', fresh.meta.attemptsDetail.join(','))
         res.setHeader('X-Provider-Articles', String(fresh.items.length))
-        if (!getFresh(cacheKey)) res.setHeader('X-Cache-L2', '1')
+        if (!getFresh(cacheKey)) {
+          res.setHeader('X-Cache-Tier', 'L2')
+        } else {
+          res.setHeader('X-Cache-Tier', 'L1')
+        }
         cache(res, 300, 60)
         await addCacheDebugHeaders(res, req)
         return res.status(200).json({ items: fresh.items })
@@ -147,11 +159,24 @@ async function handler(req: any, res: any) {
     res.setHeader('X-PK-Allowlist-Count', String(allowlist?.length || 0))
     // Use GNews-only providers
     const providers = getProvidersForPK()
+    // Determine provider intent + query for about scope (use search endpoint with expanded PK terms)
+    const isAbout = scope === 'about'
+    const aboutQuery = isAbout ? `${category} ${buildPakistanOrQuery(8)}`.trim() : category
+    const providerIntent = isAbout ? 'search' : 'top'
     const countryForCalls = scope === 'about' ? undefined : country
     const result = await tryProvidersSequential(
       providers,
-      'top',
-      { page, pageSize, country: countryForCalls, category, domains, sources, q: category },
+      providerIntent as any,
+      {
+        page,
+        pageSize,
+        country: countryForCalls,
+        category,
+        domains,
+        sources,
+        q: aboutQuery,
+        pinQ: isAbout, // keep query intact for about search variants
+      },
       (url, headers) => upstreamJson(url, headers)
     )
     // Normalize and compute PK flags
@@ -172,24 +197,7 @@ async function handler(req: any, res: any) {
     function detectCountriesFromText(title = '', summary = ''): string[] {
       const text = `${title} ${summary}`.toLowerCase()
       const hits = new Set<string>()
-      const pkTerms = [
-        'pakistan',
-        'pakistani',
-        'islamabad',
-        'lahore',
-        'karachi',
-        'peshawar',
-        'rawalpindi',
-        'balochistan',
-        'sindh',
-        'punjab',
-        'kpk',
-        'gilgit-baltistan',
-        'azad kashmir',
-        'pak rupee',
-        'pak govt',
-      ]
-      for (const term of pkTerms) {
+      for (const term of PK_TERMS) {
         if (text.includes(term)) hits.add('PK')
       }
       return Array.from(hits)
@@ -302,4 +310,4 @@ async function handler(req: any, res: any) {
   }
 }
 
-export default withHttpMetrics(handler)
+export default handler

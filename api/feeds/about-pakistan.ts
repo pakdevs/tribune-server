@@ -1,6 +1,5 @@
 import { cors, cache } from '../_shared.js'
 import handlerPK from '../pk.js'
-import { withHttpMetrics } from '../_httpMetrics.js'
 
 async function handler(req: any, res: any) {
   cors(res)
@@ -14,4 +13,4 @@ async function handler(req: any, res: any) {
   return handlerPK(req, res)
 }
 
-export default withHttpMetrics(handler)
+export default handler

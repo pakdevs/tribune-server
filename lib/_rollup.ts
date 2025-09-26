@@ -29,8 +29,12 @@ const memRollups: Map<string, RollupDoc> = (globalThis as any).__metricsRollups
 
 async function getKV() {
   try {
+    const { KV_REST_API_URL, KV_REST_API_TOKEN } = process.env as any
+    // Require both env vars to be present; otherwise skip KV entirely (fallback to memory)
+    if (!KV_REST_API_URL || !KV_REST_API_TOKEN) return null
     const mod: any = await import('@vercel/kv').catch(() => null)
-    return mod?.kv || null
+    if (!mod?.kv) return null
+    return mod.kv
   } catch {
     return null
   }

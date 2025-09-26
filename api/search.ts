@@ -1,6 +1,5 @@
 import { normalize } from '../lib/_normalize.js'
 import { cors, cache, upstreamJson, addCacheDebugHeaders } from '../lib/_shared.js'
-import { withHttpMetrics } from '../lib/_httpMetrics.js'
 import { getFresh, getStale, setCache, getFreshOrL2 } from '../lib/_cache.js'
 import { maybeScheduleRevalidate } from '../lib/_revalidate.js'
 import { buildCacheKey } from '../lib/_key.js'
@@ -13,7 +12,7 @@ import {
   attachEntityMeta,
 } from '../lib/_http.js'
 
-export default withHttpMetrics(async function handler(req: any, res: any) {
+export default async function handler(req: any, res: any) {
   cors(res)
   if (req.method === 'OPTIONS') return res.status(204).end()
   // Minimal rate limiting: 30 req / 60s per IP
@@ -72,7 +71,11 @@ export default withHttpMetrics(async function handler(req: any, res: any) {
         if (fresh.meta.attemptsDetail)
           res.setHeader('X-Provider-Attempts-Detail', fresh.meta.attemptsDetail.join(','))
         res.setHeader('X-Provider-Articles', String(fresh.items.length))
-        if (!getFresh(cacheKey)) res.setHeader('X-Cache-L2', '1')
+        if (!getFresh(cacheKey)) {
+          res.setHeader('X-Cache-Tier', 'L2')
+        } else {
+          res.setHeader('X-Cache-Tier', 'L1')
+        }
         cache(res, 300, 60)
         const meta = extractEntityMeta(fresh)
         if (meta) {
@@ -218,4 +221,4 @@ export default withHttpMetrics(async function handler(req: any, res: any) {
       })
     return res.status(500).json({ error: 'Proxy failed' })
   }
-})
+}

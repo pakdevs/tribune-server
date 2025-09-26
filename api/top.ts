@@ -1,6 +1,5 @@
 import { normalize } from './_normalize.js'
 import { cors, cache, upstreamJson, addCacheDebugHeaders } from './_shared.js'
-import { withHttpMetrics } from './_httpMetrics.js'
 import { getFresh, getStale, setCache, getFreshOrL2 } from './_cache.js'
 import { maybeScheduleRevalidate } from './_revalidate.js'
 import { buildCacheKey } from './_key.js'

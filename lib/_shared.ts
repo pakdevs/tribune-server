@@ -122,11 +122,7 @@ export async function upstreamJson(
   try {
     const r = await fetch(url, { headers, signal: controller.signal })
     const latency = Date.now() - started
-    try {
-      const m = await import('./_metrics.js')
-      if (!r.ok) m.recordUpstream('error', latency)
-      else m.recordUpstream('ok', latency)
-    } catch {}
+    // Metrics recording removed
     if (!r.ok) {
       const err: any = new Error(`Upstream ${r.status}`)
       err.status = r.status
@@ -138,10 +134,7 @@ export async function upstreamJson(
   } catch (e: any) {
     const latency = Date.now() - started
     if (e?.name === 'AbortError') {
-      try {
-        const m = await import('./_metrics.js')
-        m.recordUpstream('timeout', latency)
-      } catch {}
+      // Metrics recording removed
       const err: any = new Error('Upstream timeout')
       err.status = 504
       throw err

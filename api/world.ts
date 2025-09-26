@@ -12,9 +12,7 @@ import {
   isNotModified,
   attachEntityMeta,
 } from '../lib/_http.js'
-import { withHttpMetrics } from '../lib/_httpMetrics.js'
-
-export default withHttpMetrics(async function handler(req: any, res: any) {
+export default async function handler(req: any, res: any) {
   cors(res)
   if (req.method === 'OPTIONS') return res.status(204).end()
   // Minimal rate limiting: 60 req / 60s per IP
@@ -79,7 +77,11 @@ export default withHttpMetrics(async function handler(req: any, res: any) {
         if (fresh.meta.attemptsDetail)
           res.setHeader('X-Provider-Attempts-Detail', fresh.meta.attemptsDetail.join(','))
         res.setHeader('X-Provider-Articles', String(fresh.items.length))
-        if (!getFresh(cacheKey)) res.setHeader('X-Cache-L2', '1')
+        if (!getFresh(cacheKey)) {
+          res.setHeader('X-Cache-Tier', 'L2')
+        } else {
+          res.setHeader('X-Cache-Tier', 'L1')
+        }
         cache(res, 600, 120)
         // Ensure entity headers applied before debug header export
         const meta = extractEntityMeta(fresh) || null
@@ -305,4 +307,4 @@ export default withHttpMetrics(async function handler(req: any, res: any) {
     }
     return res.status(500).json({ error: 'Proxy failed' })
   }
-})
+}

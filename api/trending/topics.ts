@@ -1,5 +1,4 @@
 import { cors, cache, upstreamJson, addCacheDebugHeaders } from '../../lib/_shared.js'
-import { withHttpMetrics } from '../../lib/_httpMetrics.js'
 import { getFresh, getStale, setCache, setNegativeCache, getAny } from '../../lib/_cache.js'
 import {
   applyEntityHeaders,
@@ -339,4 +338,4 @@ async function handler(req: any, res: any) {
   }
 }
 
-export default withHttpMetrics(handler)
+export default handler

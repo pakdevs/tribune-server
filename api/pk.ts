@@ -17,11 +17,11 @@ import {
   isNotModified,
   attachEntityMeta,
 } from '../lib/_http.js'
-import { withHttpMetrics } from '../lib/_httpMetrics.js'
 import { isPkAboutGnewsSearchFallbackEnabled, isPkSoft429Enabled } from '../lib/_env.js'
+import { PK_TERMS, buildPakistanOrQuery } from '../lib/pkTerms.js'
 import { getPkAllowlist, getPkAllowlistMeta, isHostInAllowlist } from '../lib/pkAllowlist.js'
 
-export default withHttpMetrics(async function handler(req: any, res: any) {
+export default async function handler(req: any, res: any) {
   cors(res)
   if (req.method === 'OPTIONS') return res.status(204).end()
   // Load PK allowlist (KV-backed) once per request; cached in-memory inside helper
@@ -103,7 +103,8 @@ export default withHttpMetrics(async function handler(req: any, res: any) {
           if (freshMixed.meta.attemptsDetail)
             res.setHeader('X-Provider-Attempts-Detail', freshMixed.meta.attemptsDetail.join(','))
           res.setHeader('X-Provider-Articles', String(items.length))
-          if (!getFresh(mixedKey)) res.setHeader('X-Cache-L2', '1')
+          if (!getFresh(mixedKey)) res.setHeader('X-Cache-Tier', 'L2')
+          else res.setHeader('X-Cache-Tier', 'L1')
           cache(res, 300, 60)
           await addCacheDebugHeaders(res, req)
           return res.status(200).json({ items })
@@ -117,7 +118,8 @@ export default withHttpMetrics(async function handler(req: any, res: any) {
         if (fresh.meta.attemptsDetail)
           res.setHeader('X-Provider-Attempts-Detail', fresh.meta.attemptsDetail.join(','))
         res.setHeader('X-Provider-Articles', String(fresh.items.length))
-        if (!getFresh(cacheKey)) res.setHeader('X-Cache-L2', '1')
+        if (!getFresh(cacheKey)) res.setHeader('X-Cache-Tier', 'L2')
+        else res.setHeader('X-Cache-Tier', 'L1')
         cache(res, 300, 60)
         // Apply entity headers before debug header export
         const meta = extractEntityMeta(fresh)
@@ -135,11 +137,13 @@ export default withHttpMetrics(async function handler(req: any, res: any) {
         // Opportunistic background revalidation
         maybeScheduleRevalidate(cacheKey, async () => {
           const providers = getProvidersForPKTop()
-          const enforcedQ = q
-          const countryForCalls = scope === 'about' ? undefined : country
+          const isAbout = scope === 'about'
+          const expandedAboutQ = isAbout ? `${buildPakistanOrQuery(8)}` : q
+          const enforcedQ = isAbout ? expandedAboutQ : q
+          const countryForCalls = isAbout ? undefined : country
           const result2 = await tryProvidersSequential(
             providers,
-            'top',
+            (scope === 'about' ? 'search' : 'top') as any,
             {
               page: pageNum,
               pageSize: pageSizeNum,
@@ -154,38 +158,7 @@ export default withHttpMetrics(async function handler(req: any, res: any) {
           )
           let items2 = result2.items
           // Guarded fallback: for about-scope, if empty and flag enabled, try GNews search q=Pakistan
-          if (
-            scope === 'about' &&
-            Array.isArray(items2) &&
-            items2.length === 0 &&
-            isPkAboutGnewsSearchFallbackEnabled()
-          ) {
-            const gnewsOnly = providers.filter((p: any) => p.type === 'gnews')
-            if (gnewsOnly.length) {
-              try {
-                const alt = await tryProvidersSequential(
-                  gnewsOnly,
-                  'search',
-                  {
-                    page: pageNum,
-                    pageSize: pageSizeNum,
-                    country: undefined,
-                    q: 'Pakistan',
-                    domains: [],
-                    sources: [],
-                  },
-                  (url, headers) => upstreamJson(url, headers)
-                )
-                items2 = alt.items
-                ;(result2 as any).provider = alt.provider
-                ;(result2 as any).attempts = [...(result2.attempts || []), ...(alt.attempts || [])]
-                ;(result2 as any).attemptsDetail = [
-                  ...(result2.attemptsDetail || []),
-                  ...(alt.attemptsDetail || []),
-                ]
-              } catch {}
-            }
-          }
+          // Fallback no longer needed: about now uses search first
           let normalized2 = (items2 || []).map(normalize).filter(Boolean)
           function getTld(host = '') {
             const h = String(host || '').toLowerCase()
@@ -204,24 +177,7 @@ export default withHttpMetrics(async function handler(req: any, res: any) {
           function detectCountriesFromText(title = '', summary = ''): string[] {
             const text = `${title} ${summary}`.toLowerCase()
             const hits = new Set<string>()
-            const pkTerms = [
-              'pakistan',
-              'pakistani',
-              'islamabad',
-              'lahore',
-              'karachi',
-              'peshawar',
-              'rawalpindi',
-              'balochistan',
-              'sindh',
-              'punjab',
-              'kpk',
-              'gilgit-baltistan',
-              'azad kashmir',
-              'pak rupee',
-              'pak govt',
-            ]
-            for (const term of pkTerms) {
+            for (const term of PK_TERMS) {
               if (text.includes(term)) hits.add('PK')
             }
             return Array.from(hits)
@@ -301,54 +257,24 @@ export default withHttpMetrics(async function handler(req: any, res: any) {
       flight = setInFlight(
         flightKey,
         (async () => {
+          const isAbout = scope === 'about'
+          const aboutQ = isAbout ? buildPakistanOrQuery(8) : q
           const primary = await tryProvidersSequential(
             providers,
-            'top',
+            (isAbout ? 'search' : 'top') as any,
             {
               page: pageNum,
               pageSize: pageSizeNum,
               country: countryForCalls,
               domains,
               sources,
-              q: enforcedQ,
+              q: isAbout ? aboutQ : enforcedQ,
               pinQ: scope === 'from',
               pageToken,
             },
             (url, headers) => upstreamJson(url, headers)
           )
-          if (
-            scope === 'about' &&
-            isPkAboutGnewsSearchFallbackEnabled() &&
-            Array.isArray(primary.items) &&
-            primary.items.length === 0
-          ) {
-            const gnewsOnly = providers.filter((p: any) => p.type === 'gnews')
-            if (gnewsOnly.length) {
-              try {
-                const alt = await tryProvidersSequential(
-                  gnewsOnly,
-                  'search',
-                  {
-                    page: pageNum,
-                    pageSize: pageSizeNum,
-                    country: undefined,
-                    q: 'Pakistan',
-                    domains: [],
-                    sources: [],
-                  },
-                  (url, headers) => upstreamJson(url, headers)
-                )
-                return {
-                  ...alt,
-                  attempts: [...(primary.attempts || []), ...(alt.attempts || [])],
-                  attemptsDetail: [
-                    ...(primary.attemptsDetail || []),
-                    ...(alt.attemptsDetail || []),
-                  ],
-                }
-              } catch {}
-            }
-          }
+          // No fallback needed: about uses search intent directly
           return primary
         })()
       )
@@ -375,24 +301,7 @@ export default withHttpMetrics(async function handler(req: any, res: any) {
     function detectCountriesFromText(title = '', summary = ''): string[] {
       const text = `${title} ${summary}`.toLowerCase()
       const hits = new Set<string>()
-      const pkTerms = [
-        'pakistan',
-        'pakistani',
-        'islamabad',
-        'lahore',
-        'karachi',
-        'peshawar',
-        'rawalpindi',
-        'balochistan',
-        'sindh',
-        'punjab',
-        'kpk',
-        'gilgit-baltistan',
-        'azad kashmir',
-        'pak rupee',
-        'pak govt',
-      ]
-      for (const term of pkTerms) {
+      for (const term of PK_TERMS) {
         if (text.includes(term)) hits.add('PK')
       }
       return Array.from(hits)
@@ -533,24 +442,7 @@ export default withHttpMetrics(async function handler(req: any, res: any) {
       function detectCountriesFromText(title = '', summary = ''): string[] {
         const text = `${title} ${summary}`.toLowerCase()
         const hits = new Set<string>()
-        const pkTerms = [
-          'pakistan',
-          'pakistani',
-          'islamabad',
-          'lahore',
-          'karachi',
-          'peshawar',
-          'rawalpindi',
-          'balochistan',
-          'sindh',
-          'punjab',
-          'kpk',
-          'gilgit-baltistan',
-          'azad kashmir',
-          'pak rupee',
-          'pak govt',
-        ]
-        for (const term of pkTerms) {
+        for (const term of PK_TERMS) {
           if (text.includes(term)) hits.add('PK')
         }
         return Array.from(hits)
@@ -687,4 +579,4 @@ export default withHttpMetrics(async function handler(req: any, res: any) {
     }
     return res.status(500).json({ error: 'Proxy failed' })
   }
-})
+}

@@ -1,5 +1,4 @@
 import { cors } from '../_shared.js'
-import { withHttpMetrics } from '../_httpMetrics.js'
 
 // Deprecated: this route is removed. Use /api/world/category/[slug]
 async function handler(req: any, res: any) {
@@ -11,4 +10,4 @@ async function handler(req: any, res: any) {
   return res.end(JSON.stringify({ error: 'Gone', message: 'Use /api/world/category/[slug]' }))
 }
 
-export default withHttpMetrics(handler)
+export default handler

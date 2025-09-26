@@ -1,5 +1,4 @@
 import { purgeKey, purgePrefix } from '../lib/_cache.js'
-import { withHttpMetrics } from '../lib/_httpMetrics.js'
 
 // Simple protected purge endpoint.
 // Auth: header X-Admin-Token must equal process.env.ADMIN_PURGE_TOKEN
@@ -40,4 +39,4 @@ async function handler(req: any, res: any) {
   }
 }
 
-export default withHttpMetrics(handler)
+export default handler

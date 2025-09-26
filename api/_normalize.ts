@@ -1,3 +1,4 @@
+import { PK_TERMS } from '../lib/pkTerms.js'
 export type RawArticle = Record<string, any>
 export type NormalizedArticle = {
   id: string
@@ -191,24 +192,7 @@ export const normalize = (raw: RawArticle | null | undefined): NormalizedArticle
   function detectCountriesFromText(title = '', summary = ''): string[] {
     const text = `${title} ${summary}`.toLowerCase()
     const hits = new Set<string>()
-    const pkTerms = [
-      'pakistan',
-      'pakistani',
-      'islamabad',
-      'lahore',
-      'karachi',
-      'peshawar',
-      'rawalpindi',
-      'balochistan',
-      'sindh',
-      'punjab',
-      'kpk',
-      'gilgit-baltistan',
-      'azad kashmir',
-      'pak rupee',
-      'pak govt',
-    ]
-    for (const term of pkTerms) {
+    for (const term of PK_TERMS) {
       if (text.includes(term)) hits.add('PK')
     }
     return Array.from(hits)
