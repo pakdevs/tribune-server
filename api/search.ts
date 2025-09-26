@@ -136,6 +136,7 @@ export default async function handler(req: any, res: any) {
       items: normalized,
       meta: {
         provider: result.provider,
+        url: result.url,
         attempts: result.attempts || [result.provider],
         attemptsDetail: result.attemptsDetail,
       },
@@ -155,6 +156,7 @@ export default async function handler(req: any, res: any) {
         items: normalized2,
         meta: {
           provider: result2.provider,
+          url: result2.url,
           attempts: result2.attempts || [result2.provider],
           attemptsDetail: result2.attemptsDetail,
         },

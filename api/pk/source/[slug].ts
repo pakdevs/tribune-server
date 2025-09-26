@@ -239,6 +239,7 @@ async function handler(req: any, res: any) {
       items: result.items,
       meta: {
         provider: result.provider,
+        url: result.url,
         attempts: result.attempts || [result.provider],
         attemptsDetail: result.attemptsDetail,
       },

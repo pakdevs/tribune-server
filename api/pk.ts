@@ -388,6 +388,7 @@ export default async function handler(req: any, res: any) {
       items: allNormalized,
       meta: {
         provider: result.provider,
+        url: result.url,
         attempts: result.attempts || [result.provider],
         attemptsDetail: result.attemptsDetail,
       },
