@@ -46,6 +46,9 @@ export const PK_TERMS: string[] = [
 ]
 
 // Build an OR expression suitable for GNews search.
+// Examples:
+//   (pakistan OR pakistani OR islamabad)
+//   (pakistan OR "imran khan" OR "state bank" OR islamabad)
 // Limit number of terms to avoid excessively long URLs (GNews + typical 2KB URL limit safety).
 // Simple memo cache so repeated builds (hot path) do not re-stringify.
 // Keyed by maxTerms + a lightweight fingerprint of the current PK_TERMS contents.
