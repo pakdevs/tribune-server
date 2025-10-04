@@ -1,8 +1,6 @@
 # Pakistan Tribune News Proxy
 
-abhi test
-dosra test
-3rd
+switched to muslim server
 
 Production-focused serverless API aggregator providing normalized news articles for the Pakistan Tribune app.
 
