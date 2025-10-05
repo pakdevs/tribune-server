@@ -112,15 +112,54 @@ export async function addCacheDebugHeaders(res: any, req?: any) {
 }
 
 export async function upstreamJson(
-  url: string,
+  input:
+    | string
+    | {
+        url: string
+        headers?: Record<string, string>
+        method?: string
+        body?: any
+        timeoutMs?: number
+      },
   headers: Record<string, string> = {},
   timeoutMs = 8000
 ) {
   const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+  let url: string
+  let requestHeaders: Record<string, string>
+  let method = 'GET'
+  let body: any
+  let effectiveTimeout = timeoutMs
+
+  if (typeof input === 'string') {
+    url = input
+    requestHeaders = { ...headers }
+  } else {
+    url = input.url
+    requestHeaders = { ...(input.headers || {}) }
+    if (input.method) method = String(input.method).toUpperCase()
+    if (input.body !== undefined) body = input.body
+    if (typeof input.timeoutMs === 'number' && Number.isFinite(input.timeoutMs)) {
+      effectiveTimeout = input.timeoutMs
+    }
+  }
+
+  const timeoutId = setTimeout(() => controller.abort(), effectiveTimeout)
   const started = Date.now()
   try {
-    const r = await fetch(url, { headers, signal: controller.signal })
+    const init: any = {
+      headers: requestHeaders,
+      method,
+      signal: controller.signal,
+    }
+    if (body !== undefined) {
+      init.body = typeof body === 'string' ? body : JSON.stringify(body)
+      const headerKey = Object.keys(requestHeaders).find((k) => k.toLowerCase() === 'content-type')
+      if (!headerKey) {
+        requestHeaders['Content-Type'] = 'application/json'
+      }
+    }
+    const r = await fetch(url, init)
     const latency = Date.now() - started
     // Metrics recording removed
     if (!r.ok) {
