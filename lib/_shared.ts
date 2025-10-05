@@ -167,6 +167,16 @@ export async function upstreamJson(
       err.status = r.status
       const ra = r.headers.get('retry-after')
       if (ra) err.retryAfter = ra
+      try {
+        const text = await r.text()
+        err.body = text
+        try {
+          const parsed = JSON.parse(text)
+          err.body = parsed
+          if (parsed?.error?.message) err.hint = parsed.error.message
+          else if (parsed?.message) err.hint = parsed.message
+        } catch {}
+      } catch {}
       throw err
     }
     return r.json()
