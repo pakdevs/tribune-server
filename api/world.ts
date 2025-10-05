@@ -307,6 +307,10 @@ export default async function handler(req: any, res: any) {
         error: 'Proxy failed',
         message: e?.message || String(e),
         hint: (e as any)?.hint,
+        details: (e as any)?.errors,
+        attempts: (e as any)?.attempts,
+        attemptsDetail: (e as any)?.attemptsDetail,
+        errorBodies: (e as any)?.errorBodies,
       })
     }
     return res.status(500).json({ error: 'Proxy failed' })
