@@ -1,6 +1,6 @@
 # Pakistan Tribune News Proxy
 
-test two
+test
 
 Production-focused serverless API aggregator providing normalized news articles for the Pakistan Tribune app.
 
