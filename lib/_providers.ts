@@ -207,7 +207,6 @@ function buildNewsApiAiRequest(
     includeSourceRanking: false,
     isDuplicateFilter: 'skipDuplicates',
     dataType: ['news'],
-    forceMaxDataTimeWindow: intent === 'top' ? 7 : undefined,
   }
 
   return buildArticlesEndpointRequest(provider, 'getArticles', body, pickArticles)
