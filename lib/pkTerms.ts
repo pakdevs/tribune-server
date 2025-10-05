@@ -45,11 +45,11 @@ export const PK_TERMS: string[] = [
   'pak govt',
 ]
 
-// Build an OR expression suitable for GNews search.
+// Build an OR expression suitable for NewsAPI.ai article search payloads.
 // Examples:
 //   (pakistan OR pakistani OR islamabad)
 //   (pakistan OR "imran khan" OR "state bank" OR islamabad)
-// Limit number of terms to avoid excessively long URLs (GNews + typical 2KB URL limit safety).
+// Limit number of terms to avoid excessively large payloads (and to keep legacy URL fallbacks under control).
 // Simple memo cache so repeated builds (hot path) do not re-stringify.
 // Keyed by maxTerms + a lightweight fingerprint of the current PK_TERMS contents.
 const __pkQueryMemo = new Map<string, string>()

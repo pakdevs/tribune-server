@@ -8,11 +8,11 @@ Production-focused serverless API aggregator providing normalized news articles 
 
 | Purpose               | Route                            | Notes                                                                        |
 | --------------------- | -------------------------------- | ---------------------------------------------------------------------------- |
-| World mixed headlines | `GET /api/world`                 | Backed by GNews (country/category filters mapped to topics)                  |
-| Pakistan headlines    | `GET /api/pk`                    | Backed by GNews (country=pk; scope=from/about; see details below)            |
+| World mixed headlines | `GET /api/world`                 | Backed by NewsAPI.ai (`getArticles` with topic + location filters)           |
+| Pakistan headlines    | `GET /api/pk`                    | Backed by NewsAPI.ai (`getArticles` search + topic feed for PK scopes)       |
 | World category        | `GET /api/world/category/{slug}` | Slugs: business, entertainment, general, health, science, sports, technology |
 | Pakistan category     | `GET /api/pk/category/{slug}`    | Same slug set; “All” = From ∪ About union (merge+dedupe)                     |
-| Search (global)       | `GET /api/search?q=term`         | Backed by GNews Search                                                       |
+| Search (global)       | `GET /api/search?q=term`         | Backed by NewsAPI.ai (`getArticles` keyword search)                          |
 | Trending topics (new) | `GET /api/trending/topics`       | Returns `{ region, asOf, topics[] }` (KV/in-memory cached)                   |
 
 All successful responses: `{ items: Article[] }` (empty array if no matches). Errors: `{ error: string, message? }`.
@@ -63,15 +63,20 @@ Examples:
 
 Set only in Vercel (never commit keys):
 
-`GNEWS_API` (required)
+`NEWSAPI_AI` (required)
+`NEWSAPI_AI_DAILY_LIMIT` (optional, default 500)
+`NEWSAPI_AI_CALL_COST` (optional, default 1)
+`BUDGET_SOFT_REMAIN` (optional, defaults to 3 remaining calls reserved for foreground)
 
 Local development: create a `.env` file in this folder with:
 
 ```
-GNEWS_API=your_gnews_api_key_here
+NEWSAPI_AI=your_newsapi_ai_key_here
 ```
 
-The server loads it automatically via `dotenv` only in local runs.
+Legacy `GNEWS_API` / `GNEWS_*` variables are still read as a fallback to ease migration, but new deployments should prefer the `NEWSAPI_AI*` names.
+
+The server loads `.env` automatically via `dotenv` only in local runs.
 Keys are never exposed to the client.
 
 Storage integrations (optional):
@@ -89,19 +94,20 @@ PK endpoints use `country=pk` and support optional filters:
 
 ## Provider Strategy
 
-- Single provider: GNews. Endpoints use `top-headlines` (with `country` and derived `topic` from category) and `/search` for query-driven flows.
-- Domain/source filters are not supported upstream by GNews; we enforce them locally after normalization when provided.
+- Single provider: NewsAPI.ai. Endpoints call the article family (`article/getArticles`, `article/getArticlesForTopicPage`, `article/getArticle`, `article/getArticles` with `resultType=recentActivityArticles`) using documented POST payloads.
+- Country + topic filters are expressed via concept URIs and `sourceLocationUri` filters; keyword searches use the advanced query builder we construct in `lib/_providers.ts`.
+- Domain/source filters are still enforced locally after normalization to avoid over-specifying upstream queries (NewsAPI.ai domain filtering remains in private beta).
 
 ### Pakistan scopes
 
 - `scope=from` (default):
 
-  - Country pinned to PK (`country=pk` or `site.country:PK`).
+  - Country pinned to PK (`sourceLocationUri` filter + PK allowlist + `.pk` TLD heuristics).
   - Results filtered to PK-origin sources only.
-  - Uses GNews top-headlines (`country=pk`).
+  - Uses NewsAPI.ai `getArticles` with boosted source-importance sorting.
 
 - `scope=about` (foreign coverage about Pakistan):
-  - Always uses GNews Search (global, no `country` parameter) with an expanded OR keyword expression built from a curated list of Pakistan terms (cities, regions, finance, politics, security).
+  - Uses NewsAPI.ai keyword search (global, no `sourceLocationUri`) with an expanded OR keyword expression built from a curated list of Pakistan terms (cities, regions, finance, politics, security).
   - Post-normalization, PK-origin sources are excluded so the feed shows only foreign coverage about Pakistan.
   - Expression example (truncated): `(pakistan OR "imran khan" OR karachi OR lahore OR "state bank" OR imf ...)`.
   - A length guard trims the tail of the term list if the encoded query would exceed ~1700 characters (keeps URLs safely <2KB).

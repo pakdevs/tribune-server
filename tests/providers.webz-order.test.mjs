@@ -19,6 +19,13 @@ test('newsapi-ai provider returns items; domains handled post-fetch', async () =
     assert.equal(request.method, 'POST')
     const body = JSON.parse(request.body)
     assert.equal(body.apiKey, 'token_dummy')
+    assert.equal(body.resultType, 'articles')
+    assert.equal(body.articlesCount, 5)
+    assert.equal(body.articlesPage, 1)
+    assert.equal(body.articlesSortBy, 'sourceImportance')
+    assert.equal(body.includeArticleTitle, true)
+    assert.equal(body.dataType[0], 'news')
+    assert.equal(body.query.$filter.lang[0], 'eng')
     if (request.url.includes('newsapi.ai')) {
       return {
         articles: [
