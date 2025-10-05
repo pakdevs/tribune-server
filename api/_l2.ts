@@ -1,6 +1,6 @@
 /**
  * Phase 3 scaffold: optional distributed (or semi-distributed) L2 cache layer.
- * Feature-flag controlled by env ENABLE_L2_CACHE=1.
+ * Feature-flag controlled by env ENABLE_L2_CACHE_MUS=1 (falls back to ENABLE_L2_CACHE).
  * Initial providers: in-memory shim (per instance), Vercel KV (best-effort dynamic import).
  * Design goals:
  *  - Non-blocking: failures never break request path.
@@ -15,8 +15,10 @@ interface L2Provider {
   available(): boolean
 }
 
-const ENABLED = String(process.env.ENABLE_L2_CACHE || '0') === '1'
-const KEY_PREFIX = String(process.env.CACHE_KEY_PREFIX || '')
+const ENABLE_L2_RAW =
+  process.env.ENABLE_L2_CACHE_MUS ?? process.env.ENABLE_L2_CACHE ?? process.env.ENABLE_L2 ?? '0'
+const ENABLED = /^(1|true)$/i.test(String(ENABLE_L2_RAW).trim())
+const KEY_PREFIX = String(process.env.CACHE_KEY_PREFIX_MUS ?? process.env.CACHE_KEY_PREFIX ?? '')
 const DISABLE_KV = String(process.env.L2_DISABLE_KV || '0') === '1'
 const TTL_MULT_ENV = parseInt(String(process.env.L2_TTL_MULT || ''), 10)
 // Allow modest extension of L2 freshness (1..10x); default 2 if unset/invalid

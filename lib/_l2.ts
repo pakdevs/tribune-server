@@ -5,8 +5,10 @@ interface L2Provider {
   available(): boolean
 }
 
-const ENABLED = String(process.env.ENABLE_L2_CACHE || '0') === '1'
-const KEY_PREFIX = String(process.env.CACHE_KEY_PREFIX || '')
+const ENABLE_L2_RAW =
+  process.env.ENABLE_L2_CACHE_MUS ?? process.env.ENABLE_L2_CACHE ?? process.env.ENABLE_L2 ?? '0'
+const ENABLED = /^(1|true)$/i.test(String(ENABLE_L2_RAW).trim())
+const KEY_PREFIX = String(process.env.CACHE_KEY_PREFIX_MUS ?? process.env.CACHE_KEY_PREFIX ?? '')
 const DISABLE_KV = String(process.env.L2_DISABLE_KV || '0') === '1'
 const TTL_MULT_ENV = parseInt(String(process.env.L2_TTL_MULT || ''), 10)
 const TTL_MULT =

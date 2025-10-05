@@ -6,8 +6,10 @@ import assert from 'assert'
  * - Verifies JSON round-trip using REST shape { result }
  */
 export async function test() {
-  process.env.ENABLE_L2_CACHE = '1'
-  process.env.CACHE_KEY_PREFIX = 'trib:v1:'
+  process.env.ENABLE_L2_CACHE_MUS = '1'
+  delete process.env.ENABLE_L2_CACHE
+  process.env.CACHE_KEY_PREFIX_MUS = 'trib:v1:'
+  delete process.env.CACHE_KEY_PREFIX
   process.env.L2_TTL_MULT = '3'
   process.env.UPSTASH_REDIS_REST_URL = 'https://mock-upstash-url' // placeholder (not actually called)
   process.env.UPSTASH_REDIS_REST_TOKEN = 'TEST_TOKEN'
@@ -29,15 +31,27 @@ export async function test() {
     return { ok: false, json: async () => ({}) }
   }
 
-  const { l2Set, l2Get } = await import('../lib/_l2.js')
-  await l2Set('foo', { value: 123 }, 10) // effective TTL should be 30 via multiplier 3
-  const v = await l2Get('foo')
-  assert(v && v.value === 123, 'should retrieve mocked value')
-  // Assertions on calls
-  const setCall = calls.find((c) => c.url.includes('/set/'))
-  assert(setCall, 'set call occurred')
-  assert(/EX=30/.test(setCall.url), 'TTL multiplier applied (10 * 3) => 30')
-  assert(setCall.url.includes('/set/trib%3Av1%3Afoo/'), 'prefixed & encoded key present in set URL')
+  try {
+    const { l2Set, l2Get } = await import('../lib/_l2.js')
+    await l2Set('foo', { value: 123 }, 10) // effective TTL should be 30 via multiplier 3
+    const v = await l2Get('foo')
+    assert(v && v.value === 123, 'should retrieve mocked value')
+    // Assertions on calls
+    const setCall = calls.find((c) => c.url.includes('/set/'))
+    assert(setCall, 'set call occurred')
+    assert(/EX=30/.test(setCall.url), 'TTL multiplier applied (10 * 3) => 30')
+    assert(
+      setCall.url.includes('/set/trib%3Av1%3Afoo/'),
+      'prefixed & encoded key present in set URL'
+    )
+  } finally {
+    delete process.env.ENABLE_L2_CACHE_MUS
+    delete process.env.ENABLE_L2_CACHE
+    delete process.env.CACHE_KEY_PREFIX_MUS
+    delete process.env.L2_TTL_MULT
+    delete process.env.UPSTASH_REDIS_REST_URL
+    delete process.env.UPSTASH_REDIS_REST_TOKEN
+  }
 }
 
 export const run = test()
