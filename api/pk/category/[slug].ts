@@ -174,12 +174,20 @@ async function handler(req: any, res: any) {
         (request: any) => upstreamJson(request)
       ),
     ])
+    const requestPairs: Array<[string, any]> = []
+    if (topRes?.request) requestPairs.push(['top', { intent: 'top', ...topRes.request }])
+    if (aboutRes?.request) requestPairs.push(['about', { intent: 'search', ...aboutRes.request }])
+    let requestMeta: any
+    if (requestPairs.length === 1) requestMeta = requestPairs[0][1]
+    else if (requestPairs.length > 1) requestMeta = Object.fromEntries(requestPairs)
+
     const result = {
       items: [...(topRes?.items || []), ...(aboutRes?.items || [])],
       provider: topRes?.provider || aboutRes?.provider,
       attempts: (topRes?.attempts || []).concat(aboutRes?.attempts || []),
       attemptsDetail: (topRes?.attemptsDetail || []).concat(aboutRes?.attemptsDetail || []),
       url: `${topRes?.url || ''} || ${aboutRes?.url || ''}`,
+      request: requestMeta,
     }
     // Normalize and compute PK flags
     function getTld(host = '') {
@@ -236,6 +244,7 @@ async function handler(req: any, res: any) {
       meta: {
         provider: result.provider,
         url: result.url,
+        request: result.request,
         cacheKey: unionKey,
         attempts: result.attempts || [result.provider],
         attemptsDetail: result.attemptsDetail,
@@ -247,6 +256,7 @@ async function handler(req: any, res: any) {
       meta: {
         provider: result.provider,
         url: result.url,
+        request: result.request,
         cacheKey,
         attempts: result.attempts || [result.provider],
         attemptsDetail: result.attemptsDetail,
@@ -260,6 +270,7 @@ async function handler(req: any, res: any) {
         debug: {
           provider: result.provider,
           url: result.url,
+          request: result.request,
           attempts: result.attempts,
           attemptsDetail: result.attemptsDetail,
           cacheKey,

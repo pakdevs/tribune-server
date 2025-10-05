@@ -185,6 +185,7 @@ export default async function handler(req: any, res: any) {
       meta: {
         provider: result.provider,
         url: result.url,
+        request: result.request,
         cacheKey,
         attempts: result.attempts || [result.provider],
         attemptsDetail: result.attemptsDetail,
@@ -221,6 +222,7 @@ export default async function handler(req: any, res: any) {
         meta: {
           provider: result2.provider,
           url: result2.url,
+          request: result2.request,
           cacheKey,
           attempts: result2.attempts || [result2.provider],
           attemptsDetail: result2.attemptsDetail,
@@ -243,6 +245,7 @@ export default async function handler(req: any, res: any) {
         debug: {
           provider: result.provider,
           url: result.url,
+          request: result.request,
           attempts: result.attempts,
           attemptsDetail: result.attemptsDetail,
           errors: (result as any).errors,

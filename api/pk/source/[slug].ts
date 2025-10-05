@@ -19,6 +19,31 @@ const slugify = (s = '') =>
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
 
+function sanitizeRequestMeta(req: any, variant: string) {
+  const meta: any = { url: req?.url, variant }
+  const method = req?.method || 'GET'
+  if (method.toUpperCase() !== 'GET') meta.method = method
+  if (req?.body !== undefined) {
+    let body: any = req.body
+    if (typeof body === 'string') {
+      try {
+        body = JSON.parse(body)
+      } catch {}
+    }
+    if (body && typeof body === 'object') {
+      const copy = Array.isArray(body) ? [...body] : { ...body }
+      if (copy && typeof copy === 'object') {
+        if ('apiKey' in copy) copy.apiKey = '[redacted]'
+        if ('token' in copy) copy.token = '[redacted]'
+      }
+      meta.body = copy
+    } else {
+      meta.body = body
+    }
+  }
+  return meta
+}
+
 async function handler(req: any, res: any) {
   cors(res)
   if (req.method === 'OPTIONS') return res.status(204).end()
@@ -96,6 +121,7 @@ async function handler(req: any, res: any) {
           let ordered = providers
           const attempts: string[] = []
           const attemptsDetail: string[] = []
+          let lastRequestMeta: any = null
           const targetSlug = slug
           const nameLower = name.toLowerCase()
           const allowedDomains = new Set(
@@ -125,7 +151,7 @@ async function handler(req: any, res: any) {
                 strategies.push({ label: 'sources+name(name)', sources: [nameSlug], q })
               strategies.push({ label: 'q-only', q })
               // Try each strategy with sub-variants
-              let best: { items: any[] } | null = null
+              let best: { items: any[]; url?: string; request?: any } | null = null
               for (const s of strategies) {
                 const subVariants: Array<{
                   label: string
@@ -158,6 +184,8 @@ async function handler(req: any, res: any) {
                       attemptsDetail.push(`${p.type}:${sub.label}(unsupported)`)
                       continue
                     }
+                    const requestMeta = sanitizeRequestMeta(reqSpec, sub.label)
+                    lastRequestMeta = requestMeta
                     const controller = new AbortController()
                     const timeoutId = setTimeout(() => controller.abort(), 8000)
                     const json = await fetch(reqSpec.url, {
@@ -201,7 +229,7 @@ async function handler(req: any, res: any) {
                     }
                     if (filtered.length) {
                       attemptsDetail.push(`${p.type}:${sub.label}(ok:${filtered.length})`)
-                      best = { items: filtered }
+                      best = { items: filtered, url: reqSpec.url, request: requestMeta }
                       break
                     }
                     attemptsDetail.push(`${p.type}:${sub.label}(no-source-match)`)
@@ -222,6 +250,8 @@ async function handler(req: any, res: any) {
                 return {
                   items: best.items,
                   provider: p.type,
+                  url: best.url || '',
+                  request: best.request,
                   attempts,
                   attemptsDetail,
                 }
@@ -230,7 +260,14 @@ async function handler(req: any, res: any) {
               attemptsDetail.push(`${p.type}(err)`)
             }
           }
-          return { items: [], provider: attempts[0] || '', attempts, attemptsDetail }
+          return {
+            items: [],
+            provider: attempts[0] || '',
+            url: lastRequestMeta?.url || '',
+            request: lastRequestMeta,
+            attempts,
+            attemptsDetail,
+          }
         })()
       )
     }
@@ -240,6 +277,7 @@ async function handler(req: any, res: any) {
       meta: {
         provider: result.provider,
         url: result.url,
+        request: result.request,
         cacheKey,
         attempts: result.attempts || [result.provider],
         attemptsDetail: result.attemptsDetail,
@@ -259,6 +297,7 @@ async function handler(req: any, res: any) {
         debug: {
           attempts: result.attempts,
           attemptsDetail: result.attemptsDetail,
+          request: result.request,
           q,
           country,
           slug,

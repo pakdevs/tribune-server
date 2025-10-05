@@ -108,6 +108,38 @@ function stripUndefined(obj: Record<string, any>) {
   return obj
 }
 
+function sanitizeRequestMeta(
+  req: ProviderRequest,
+  label: string
+): { url: string; method?: string; body?: any; variant: string } {
+  const meta: { url: string; method?: string; body?: any; variant: string } = {
+    url: req.url,
+    variant: label,
+  }
+  if (req.method && req.method.toUpperCase() !== 'GET') {
+    meta.method = req.method
+  }
+  if (req.body !== undefined) {
+    let body: any = req.body
+    if (typeof body === 'string') {
+      try {
+        body = JSON.parse(body)
+      } catch {}
+    }
+    if (body && typeof body === 'object') {
+      const copy = Array.isArray(body) ? [...body] : { ...body }
+      if (copy && typeof copy === 'object') {
+        if ('apiKey' in copy) copy.apiKey = '[redacted]'
+        if ('token' in copy) copy.token = '[redacted]'
+      }
+      meta.body = copy
+    } else {
+      meta.body = body
+    }
+  }
+  return meta
+}
+
 const pickArticles = (d: any) => {
   if (!d) return []
   if (Array.isArray(d.articles)) return d.articles
@@ -438,11 +470,13 @@ export async function tryProvidersSequential(
         })
       variants.push({ label: 'topic-only', o: { ...opts, q: undefined, page: 1 } })
 
-      let lastAttemptUrl: string | undefined
+      let lastAttemptRequest:
+        | { url: string; method?: string; body?: any; variant: string }
+        | undefined
       const runVariant = async (label: string, o: any) => {
         const req = buildProviderRequest(p, intent, o)
         if (!req) throw new Error('Unsupported request for provider')
-        lastAttemptUrl = req.url
+        lastAttemptRequest = sanitizeRequestMeta(req, label)
         try {
           const { pick, ...fetchParams } = req
           const json = await fetcher(fetchParams)
@@ -454,7 +488,13 @@ export async function tryProvidersSequential(
             recordSuccess(p.type, items.length)
             breaker.onSuccess(p.type)
             attemptsDetail.push(`${p.type}:${label}(ok:${items.length})`)
-            return { items, provider: p.type, url: req.url, raw: json }
+            return {
+              items,
+              provider: p.type,
+              url: req.url,
+              request: sanitizeRequestMeta(req, label),
+              raw: json,
+            }
           }
           recordEmpty(p.type)
           attemptsDetail.push(`${p.type}:${label}(empty)`)
@@ -485,7 +525,8 @@ export async function tryProvidersSequential(
       return {
         items: [],
         provider: p.type,
-        url: lastAttemptUrl || '',
+        url: lastAttemptRequest?.url || '',
+        request: lastAttemptRequest,
         raw: null,
         attempts,
         attemptsDetail,
