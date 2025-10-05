@@ -397,6 +397,8 @@ export async function tryProvidersSequential(
   const attempts: string[] = []
   const attemptsDetail: string[] = []
   const errorDetails: string[] = []
+  const errorHints: string[] = []
+  const errorBodies: Array<{ provider: string; variant?: string; body: any }> = []
   if (!providers.length) {
     const err: any = new Error('No providers configured (NEWSAPI_AI missing)')
     err.hint = 'Set NEWSAPI_AI in your environment (Vercel env or local .env)'
@@ -468,6 +470,9 @@ export async function tryProvidersSequential(
           }
           attemptsDetail.push(`${p.type}:${label}(err)`)
           errorDetails.push(`${p.type}:${label}: ${msg || 'error'}`)
+          if (err?.hint) errorHints.push(`${p.type}:${label}: ${String(err.hint)}`)
+          if (err?.body !== undefined)
+            errorBodies.push({ provider: p.type, variant: label, body: err.body })
           throw err
         }
       }
@@ -500,6 +505,8 @@ export async function tryProvidersSequential(
         )
       }
       errors.push(`${p.type}: ${e?.message || e}`)
+      if (e?.hint) errorHints.push(`${p.type}: ${String(e.hint)}`)
+      if (e?.body !== undefined) errorBodies.push({ provider: p.type, body: e.body })
     }
   }
   const err: any = new Error(`All providers failed: ${errors.join(' | ')}`)
@@ -507,5 +514,7 @@ export async function tryProvidersSequential(
   err.attempts = attempts
   err.attemptsDetail = attemptsDetail
   err.errors = errorDetails
+  if (errorHints.length) err.hint = errorHints.join(' | ')
+  if (errorBodies.length) err.errorBodies = errorBodies
   throw err
 }
