@@ -59,8 +59,8 @@ export default async function handler(req: any, res: any) {
   } catch {}
   const rawPage = String(req.query.page || '1')
   const pageNum = Math.max(1, parseInt(rawPage, 10) || 1)
-  // Enforce fixed page size of 10 per request
-  const pageSizeNum = 10
+  // Enforce fixed page size of 100 per request
+  const pageSizeNum = 100
   const country = 'pk'
   const scope = String(req.query.scope || 'mixed') // 'mixed' | 'from' | 'about'
   const pageToken = req.query.pageToken ? String(req.query.pageToken) : undefined
@@ -542,7 +542,7 @@ export default async function handler(req: any, res: any) {
     return res.status(200).json({ items: normalized })
   } catch (e: any) {
     const page = String(req.query.page || '1')
-    const pageSize = '10'
+    const pageSize = '100'
     const country = 'pk'
     const cacheKey = buildCacheKey('pk-top', {
       country,

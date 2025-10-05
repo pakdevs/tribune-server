@@ -42,8 +42,8 @@ export default async function handler(req: any, res: any) {
   } catch {}
   const rawPage = String(req.query.page || '1')
   const pageNum = Math.max(1, parseInt(rawPage, 10) || 1)
-  // Enforce fixed page size of 10 per request
-  const pageSizeNum = 10
+  // Enforce fixed page size of 100 per request
+  const pageSizeNum = 100
   let country = String(req.query.country || 'us').toLowerCase()
   if (!/^[a-z]{2}$/i.test(country)) country = 'us'
   const pageToken = req.query.pageToken ? String(req.query.pageToken) : undefined
@@ -267,9 +267,8 @@ export default async function handler(req: any, res: any) {
   } catch (e: any) {
     const country = String(req.query.country || 'us')
     const rawPage = String(req.query.page || '1')
-    const rawPageSize = '10'
-    const pageNum = Math.max(1, parseInt(rawPage, 10) || 1)
-    const pageSizeNum = Math.min(100, Math.max(1, parseInt(rawPageSize, 10) || 50))
+    const rawPageSize = '100'
+    const pageSizeNum = Math.min(100, Math.max(1, parseInt(rawPageSize, 10) || 100))
     const domains = String(req.query.domains || '')
       .split(',')
       .map((s) => s.trim())

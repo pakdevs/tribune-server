@@ -112,8 +112,13 @@ export const normalize = (raw: RawArticle | null | undefined): NormalizedArticle
       ''
   )
 
-  let sourceName: string =
+  let sourceName: any =
     (raw as any).source?.name ||
+    (raw as any).source?.title ||
+    (raw as any).source?.displayName ||
+    (raw as any).source?.source ||
+    (raw as any).source?.sourceName ||
+    (raw as any).source?.uri ||
     (raw as any).source_name ||
     (raw as any).sourceName ||
     (raw as any).source_id ||
@@ -125,6 +130,17 @@ export const normalize = (raw: RawArticle | null | undefined): NormalizedArticle
     (raw as any).rights ||
     (raw as any).newsSite ||
     ''
+
+  if (sourceName && typeof sourceName === 'object') {
+    const obj = sourceName
+    const extracted =
+      (obj &&
+        (obj.name || obj.title || obj.displayName || obj.sourceName || obj.source || obj.uri)) ??
+      ''
+    sourceName = extracted ? String(extracted) : ''
+  }
+
+  sourceName = String(sourceName || '')
 
   const sourceUrl = String(
     (raw as any).sourceUrl ||
@@ -147,7 +163,6 @@ export const normalize = (raw: RawArticle | null | undefined): NormalizedArticle
     } catch {}
   }
 
-  sourceName = String(sourceName)
   let displaySourceName = sourceName
   if (sourceDomain && (!displaySourceName || displaySourceName === sourceDomain)) {
     const base = sourceDomain.split('.')

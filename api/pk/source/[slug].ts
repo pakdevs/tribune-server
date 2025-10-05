@@ -31,8 +31,8 @@ async function handler(req: any, res: any) {
     .filter(Boolean) as string[]
   const rawPage = String(req.query.page || '1')
   const pageNum = Math.max(1, parseInt(rawPage, 10) || 1)
-  // Fixed page size of 10
-  const pageSizeNum = 10
+  // Fixed page size of 100
+  const pageSizeNum = 100
   const from = req.query.from ? String(req.query.from) : undefined
   const to = req.query.to ? String(req.query.to) : undefined
   let country = 'pk'

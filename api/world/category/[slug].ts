@@ -41,9 +41,9 @@ async function handler(req: any, res: any) {
   const category = allowed.has(mapped) ? mapped : 'general'
 
   const rawPage = String(req.query.page || '1')
-  const rawPageSize = String(req.query.pageSize || req.query.limit || '20')
+  const rawPageSize = String(req.query.pageSize || req.query.limit || '100')
   const pageNum = Math.max(1, parseInt(rawPage, 10) || 1)
-  const pageSizeNum = Math.min(100, Math.max(1, parseInt(rawPageSize, 10) || 50))
+  const pageSizeNum = Math.min(100, Math.max(1, parseInt(rawPageSize, 10) || 100))
   const country = String(req.query.country || 'us')
   // Optional filters: domains, sources
   const domains = String(req.query.domains || '')

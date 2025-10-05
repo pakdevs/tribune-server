@@ -40,7 +40,7 @@ async function handler(req: any, res: any) {
   const category = allowed.has(mapped) ? mapped : 'general'
 
   const page = String(req.query.page || '1')
-  const pageSize = String(req.query.pageSize || req.query.limit || '10')
+  const pageSize = String(req.query.pageSize || req.query.limit || '100')
   // Scoping: union (default), from, about
   const scope = String(req.query.scope || 'union')
   // Optional filters: domains, sources
