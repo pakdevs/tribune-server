@@ -205,7 +205,6 @@ function buildNewsApiAiRequest(
     includeSourceTitle: true,
     includeSourceLocation: false,
     includeSourceRanking: false,
-    isDuplicateFilter: 'skipDuplicates',
     dataType: ['news'],
   }
 
