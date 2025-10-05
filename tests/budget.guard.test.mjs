@@ -2,8 +2,8 @@ import assert from 'assert'
 
 export async function test() {
   // Configure tight budget
-  process.env.GNEWS_DAILY_LIMIT = '5'
-  process.env.GNEWS_CALL_COST = '1'
+  process.env.NEWSAPI_AI_DAILY_LIMIT = '5'
+  process.env.NEWSAPI_AI_CALL_COST = '1'
   process.env.BUDGET_SOFT_REMAIN = '3'
   process.env.ENABLE_BG_REVALIDATE = '1'
   process.env.BG_REVALIDATE_FRESH_THRESHOLD_MS = '2000'
@@ -21,8 +21,8 @@ export async function test() {
   setCache(key, { items: [{ v: 1 }], meta: { provider: 'x', attempts: ['x'] } }, 1, 0.5)
 
   // Spend up to leave only soft remain
-  spend('gnews', 2)
-  assert.strictEqual(getUsedToday('gnews'), 2)
+  spend('newsapi-ai', 2)
+  assert.strictEqual(getUsedToday('newsapi-ai'), 2)
 
   // With limit=5 and soft=3, remaining=3; guard should skip (<= soft)
   maybeScheduleRevalidate(key, async () => ({

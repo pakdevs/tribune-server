@@ -4,7 +4,7 @@ import { getFresh, getStale, setCache, getFreshOrL2 } from '../lib/_cache.js'
 import { maybeScheduleRevalidate } from '../lib/_revalidate.js'
 import { buildCacheKey } from '../lib/_key.js'
 import { getProvidersForWorld, tryProvidersSequential } from '../lib/_providers.js'
-// GNews-only provider
+// NewsAPI.ai provider
 import { getInFlight, setInFlight } from '../lib/_inflight.js'
 import {
   applyEntityHeaders,
@@ -101,7 +101,7 @@ export default async function handler(req: any, res: any) {
             providers,
             'top',
             { page: pageNum, pageSize: pageSizeNum, country, domains, sources, q, pageToken },
-            (url, headers) => upstreamJson(url, headers)
+            (request: any) => upstreamJson(request)
           )
           let normalized = result.items.map(normalize).filter(Boolean)
           if (domains.length) {
@@ -144,7 +144,7 @@ export default async function handler(req: any, res: any) {
           providers,
           'top',
           { page: pageNum, pageSize: pageSizeNum, country, domains, sources, q, pageToken },
-          (url, headers) => upstreamJson(url, headers)
+          (request: any) => upstreamJson(request)
         )
       )
     }
@@ -198,7 +198,7 @@ export default async function handler(req: any, res: any) {
         providers2,
         'top',
         { page: pageNum, pageSize: pageSizeNum, country, domains, sources, q, pageToken },
-        (url, headers) => upstreamJson(url, headers)
+        (request: any) => upstreamJson(request)
       )
       let normalized2 = result2.items.map(normalize).filter(Boolean)
       if (domains.length) {

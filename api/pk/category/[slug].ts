@@ -147,7 +147,7 @@ async function handler(req: any, res: any) {
     res.setHeader('X-PK-Scope', scope)
     res.setHeader('X-PK-Allowlist-Source', allowlistSource)
     res.setHeader('X-PK-Allowlist-Count', String(allowlist?.length || 0))
-    // Use GNews-only providers
+    // Use NewsAPI.ai provider list
     const providers = getProvidersForPK()
     // Always compose union once (top + about-search), then filter subset for requested scope
     const aboutQuery = `${category} ${buildPakistanOrQuery(8)}`.trim()
@@ -156,7 +156,7 @@ async function handler(req: any, res: any) {
         providers,
         'top' as any,
         { page, pageSize, country, category, domains, sources },
-        (url, headers) => upstreamJson(url, headers)
+        (request: any) => upstreamJson(request)
       ),
       tryProvidersSequential(
         providers,
@@ -171,7 +171,7 @@ async function handler(req: any, res: any) {
           q: aboutQuery,
           pinQ: true,
         },
-        (url, headers) => upstreamJson(url, headers)
+        (request: any) => upstreamJson(request)
       ),
     ])
     const result = {

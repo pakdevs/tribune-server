@@ -93,7 +93,7 @@ export default async function handler(req: any, res: any) {
             providers,
             'search',
             { page: pageNum, pageSize: pageSizeNum, country, q, domains, from, to },
-            (url, headers) => upstreamJson(url, headers)
+            (request: any) => upstreamJson(request)
           )
           const normalized2 = result2.items.map(normalize).filter(Boolean)
           return {
@@ -122,7 +122,7 @@ export default async function handler(req: any, res: any) {
           providers,
           'search',
           { page: pageNum, pageSize: pageSizeNum, country, q, domains, from, to },
-          (url, headers) => upstreamJson(url, headers)
+          (request: any) => upstreamJson(request)
         )
       )
     }
@@ -150,7 +150,7 @@ export default async function handler(req: any, res: any) {
         providers,
         'search',
         { page: pageNum, pageSize: pageSizeNum, country, q, domains, from, to },
-        (url, headers) => upstreamJson(url, headers)
+        (request: any) => upstreamJson(request)
       )
       const normalized2 = result2.items.map(normalize).filter(Boolean)
       return {

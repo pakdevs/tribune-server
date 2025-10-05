@@ -2,26 +2,26 @@
 // env vars are provided by the platform and this import is a no-op.
 import 'dotenv/config'
 
-// GNews API key (set GNEWS_API in Vercel env)
-export function getGnewsApiKey(): string | undefined {
-  const key = (process as any).env.GNEWS_API
+// NewsAPI.ai API key (set NEWSAPI_AI in Vercel env). Falls back to legacy GNEWS_API for compatibility.
+export function getNewsApiAiKey(): string | undefined {
+  const key = (process as any).env.NEWSAPI_AI || (process as any).env.GNEWS_API
   return key ? String(key) : undefined
 }
 
-// Daily request budget for GNews to preserve quota / reduce cost.
-// Example: GNEWS_DAILY_LIMIT=500
-export function getGnewsDailyLimit(): number {
-  const v = (process as any).env.GNEWS_DAILY_LIMIT
-  if (v === undefined) return 500 // reasonable default for free/paid tiers
-  const n = Number(v)
+// Daily request budget for NewsAPI.ai to preserve quota / reduce cost.
+// Example: NEWSAPI_AI_DAILY_LIMIT=500
+export function getNewsApiAiDailyLimit(): number {
+  const raw = (process as any).env.NEWSAPI_AI_DAILY_LIMIT ?? (process as any).env.GNEWS_DAILY_LIMIT
+  if (raw === undefined) return 500 // reasonable default for free/paid tiers
+  const n = Number(raw)
   return Number.isFinite(n) ? n : 500
 }
 
-// Logical cost per GNews call. Default 1. Useful if you weigh some flows higher.
-export function getGnewsCallCost(): number {
-  const v = (process as any).env.GNEWS_CALL_COST
-  if (v === undefined) return 1
-  const n = Number(v)
+// Logical cost per NewsAPI.ai call. Default 1. Useful if you weigh some flows higher.
+export function getNewsApiAiCallCost(): number {
+  const raw = (process as any).env.NEWSAPI_AI_CALL_COST ?? (process as any).env.GNEWS_CALL_COST
+  if (raw === undefined) return 1
+  const n = Number(raw)
   return Number.isFinite(n) ? Math.max(1, Math.floor(n)) : 1
 }
 
@@ -41,7 +41,7 @@ export function isBreakerEnabled(): boolean {
   return s === '1' || s === 'true' || s === 'yes'
 }
 
-// Feature flag: allow GNews /search fallback for PK "about" scope when top-headlines return nothing
+// Feature flag: allow NewsAPI.ai /search fallback for PK "about" scope when top-headlines return nothing
 
 // Feature flag: when upstream returns 429 and no stale cache exists,
 // respond with 200 + empty items and a hint header instead of passing 429 through.

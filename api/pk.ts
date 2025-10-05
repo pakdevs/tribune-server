@@ -9,7 +9,7 @@ import {
   getProvidersForPKTop,
   tryProvidersSequential,
 } from '../lib/_providers.js'
-// GNews-only provider
+// NewsAPI.ai provider
 import { getInFlight, setInFlight } from '../lib/_inflight.js'
 import {
   applyEntityHeaders,
@@ -154,10 +154,10 @@ export default async function handler(req: any, res: any) {
               pinQ: scope === 'from',
               pageToken,
             },
-            (url, headers) => upstreamJson(url, headers)
+            (request: any) => upstreamJson(request)
           )
           let items2 = result2.items
-          // Guarded fallback: for about-scope, if empty and flag enabled, try GNews search q=Pakistan
+          // Guarded fallback: legacy note for GNews has been retired (search intent used first)
           // Fallback no longer needed: about now uses search first
           let normalized2 = (items2 || []).map(normalize).filter(Boolean)
           function getTld(host = '') {
@@ -244,7 +244,7 @@ export default async function handler(req: any, res: any) {
     res.setHeader('X-Cache', 'MISS')
     res.setHeader('X-PK-Allowlist-Source', allowlistSource)
     res.setHeader('X-PK-Allowlist-Count', String(allowlist?.length || 0))
-    // Use GNews-only providers
+    // Use NewsAPI.ai provider list
     const providers = getProvidersForPKTop()
     const flightKey = `pk:${country}:${String(pageNum)}:${String(pageSizeNum)}:pt:${
       pageToken || ''
@@ -272,7 +272,7 @@ export default async function handler(req: any, res: any) {
               pinQ: scope === 'from',
               pageToken,
             },
-            (url, headers) => upstreamJson(url, headers)
+            (request: any) => upstreamJson(request)
           )
           // No fallback needed: about uses search intent directly
           return primary
@@ -422,7 +422,7 @@ export default async function handler(req: any, res: any) {
           pinQ: false,
           pageToken,
         },
-        (url, headers) => upstreamJson(url, headers)
+        (request: any) => upstreamJson(request)
       )
       let items2 = result2.items
       // Produce canonical (all) normalized list; consumers filter per-scope

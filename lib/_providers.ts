@@ -1,169 +1,214 @@
 import { recordSuccess, recordError, recordEmpty } from './_stats.js'
 import { isCoolingDown, setCooldown } from './_cooldown.js'
-import { getGnewsApiKey, getGnewsDailyLimit, getGnewsCallCost } from './_env.js'
+import { getNewsApiAiKey, getNewsApiAiDailyLimit, getNewsApiAiCallCost } from './_env.js'
 import { canSpend, spend } from './_budget.js'
 import * as breaker from './_breaker.js'
 
 const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n))
 
-export function getProvidersForPK() {
-  const list: Array<{ type: string; key: string }> = []
-  const gnews = getGnewsApiKey()
-  if (gnews) list.push({ type: 'gnews', key: gnews })
-  return list
+export type ProviderType = 'newsapi-ai'
+
+export type ProviderConfig = { type: ProviderType; key: string }
+
+export type ProviderFetchParams = {
+  url: string
+  headers: Record<string, string>
+  method?: string
+  body?: any
+  timeoutMs?: number
 }
 
-// For Pakistan top/category endpoints we use GNews provider.
-export function getProvidersForPKTop() {
-  const list: Array<{ type: string; key: string }> = []
-  const gnews = getGnewsApiKey()
-  if (gnews) list.push({ type: 'gnews', key: gnews })
-  return list
+export type ProviderRequest = ProviderFetchParams & {
+  pick: (data: any) => any[]
 }
 
-export function getProvidersForWorld() {
-  const list: Array<{ type: string; key: string }> = []
-  const gnews = getGnewsApiKey()
-  if (gnews) list.push({ type: 'gnews', key: gnews })
-  return list
+const DEFAULT_NEWSAPI_ENDPOINT = 'https://newsapi.ai/api/v1/article/getArticles'
+const NEWSAPI_ENDPOINT = String(
+  (process as any)?.env?.NEWSAPI_AI_ENDPOINT || DEFAULT_NEWSAPI_ENDPOINT
+)
+
+const CATEGORY_CONCEPT_MAP: Record<string, string> = {
+  general: 'http://en.wikipedia.org/wiki/News',
+  world: 'http://en.wikipedia.org/wiki/World',
+  business: 'http://en.wikipedia.org/wiki/Business',
+  technology: 'http://en.wikipedia.org/wiki/Technology',
+  tech: 'http://en.wikipedia.org/wiki/Technology',
+  entertainment: 'http://en.wikipedia.org/wiki/Entertainment',
+  sports: 'http://en.wikipedia.org/wiki/Sport',
+  science: 'http://en.wikipedia.org/wiki/Science',
+  health: 'http://en.wikipedia.org/wiki/Health',
+  politics: 'http://en.wikipedia.org/wiki/Politics',
 }
 
-export function buildProviderRequest(p: any, intent: 'top' | 'search', opts: any) {
+function normalizeLanguage(lang: any, fallback = 'en') {
+  const value = String(lang || '')
+    .trim()
+    .toLowerCase()
+  if (!value) return fallback
+  if (/^[a-z]{2}$/.test(value)) return value
+  return fallback
+}
+
+function buildNewsApiAiRequest(
+  provider: ProviderConfig,
+  intent: 'top' | 'search',
+  opts: any
+): ProviderRequest {
   const page = clamp(parseInt(String(opts.page || '1'), 10) || 1, 1, 100000)
-  // Enforce fixed page size of 10 regardless of inbound value
-  const pageSize = 10
-  const country = String(opts.country || 'us')
-  const q: string | undefined = opts.q ? String(opts.q) : undefined
-  const domains = Array.isArray(opts.domains)
-    ? opts.domains.filter(Boolean)
-    : opts.domains
-    ? [String(opts.domains)]
-    : []
-  const sources = Array.isArray(opts.sources)
-    ? opts.sources.filter(Boolean)
-    : opts.sources
-    ? [String(opts.sources)]
-    : []
+  const pageSize = clamp(parseInt(String(opts.pageSize || '10'), 10) || 10, 1, 100)
+  const language = normalizeLanguage(opts.language, 'en')
+  const country = (() => {
+    const raw = String(opts.country || '').trim()
+    if (!raw) return undefined
+    const upper = raw.toUpperCase()
+    return /^[A-Z]{2}$/.test(upper) ? `country/${upper}` : undefined
+  })()
+  const q: string | undefined = opts.q ? String(opts.q).trim() : undefined
   const category: string | undefined = opts.category
     ? String(opts.category).toLowerCase()
     : undefined
 
-  if (p.type === 'gnews') {
-    const params = new URLSearchParams()
-    params.set('lang', String(opts.language || 'en'))
-    params.set('token', p.key)
-    const pageNum = clamp(parseInt(String(opts.page || '1'), 10) || 1, 1, 100000)
-    params.set('page', String(pageNum))
-    params.set('max', '10')
-    if (opts.q) params.set('q', String(opts.q))
-    // Country mapping: GNews uses country codes e.g., us, pk; if provided, set it
-    if (opts.country && /^[a-z]{2}$/i.test(String(opts.country))) {
-      params.set('country', String(opts.country).toLowerCase())
-    }
-
-    if (intent === 'search') {
-      // GNews Search API
-      // Docs: https://gnews.io/docs/v4#search
-      const url = `https://gnews.io/api/v4/search?${params.toString()}`
-      const pick = (d: any) => d?.articles || d?.posts || d?.results || []
-      return { url, headers: {}, pick }
-    }
-    // Default: top-headlines
-    // Docs: https://gnews.io/docs/v4#top-headlines
-    // Map category to topic where possible
-    const category: string | undefined = opts.category
-      ? String(opts.category).toLowerCase()
-      : undefined
-    // Allowed topics: world, nation, business, technology, entertainment, sports, science, health
-    const topicAlias: Record<string, string> = {
-      general: 'world',
-      world: 'world',
-      business: 'business',
-      technology: 'technology',
-      tech: 'technology',
-      entertainment: 'entertainment',
-      sports: 'sports',
-      science: 'science',
-      health: 'health',
-      politics: 'nation',
-    }
-    if (category) {
-      const topic = topicAlias[category]
-      if (topic) params.set('topic', topic)
-    }
-    const url = `https://gnews.io/api/v4/top-headlines?${params.toString()}`
-    const pick = (d: any) => d?.articles || d?.posts || d?.results || []
-    return { url, headers: {}, pick }
+  const queryClauses: any[] = []
+  if (q) {
+    queryClauses.push({ keyword: q, keywordLoc: 'body' })
   }
-  // No other providers supported
+  if (category && CATEGORY_CONCEPT_MAP[category]) {
+    queryClauses.push({ conceptUri: CATEGORY_CONCEPT_MAP[category] })
+  }
+  if (intent === 'top' && !q && country) {
+    queryClauses.push({ locationUri: country })
+  }
+  if (!queryClauses.length) {
+    queryClauses.push({ keyword: 'news', keywordLoc: 'title' })
+  }
+
+  const filter: Record<string, any> = {
+    lang: [language],
+  }
+  if (country) {
+    filter.sourceLocationUri = [country]
+  }
+
+  const body = {
+    apiKey: provider.key,
+    query: {
+      $query: { $and: queryClauses },
+      $filter: filter,
+    },
+    resultType: 'articles',
+    articles: {
+      page,
+      count: pageSize,
+      sortBy: intent === 'top' ? 'sourceImportance' : 'date',
+      sortByAsc: false,
+      articleBodyLen: -1,
+      articleHasDuplicate: 'skipDuplicates',
+      articleHasImage: true,
+    },
+  }
+
+  const pick = (d: any) => {
+    if (!d) return []
+    if (Array.isArray(d.articles)) return d.articles
+    if (Array.isArray(d.results)) return d.results
+    if (Array.isArray(d?.articles?.results)) return d.articles.results
+    if (Array.isArray(d?.data?.articles)) return d.data.articles
+    return []
+  }
+
+  return {
+    url: NEWSAPI_ENDPOINT,
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify(body),
+    pick,
+  }
+}
+
+export function getProvidersForPK(): ProviderConfig[] {
+  const list: ProviderConfig[] = []
+  const key = getNewsApiAiKey()
+  if (key) list.push({ type: 'newsapi-ai', key })
+  return list
+}
+
+export function getProvidersForPKTop(): ProviderConfig[] {
+  const list: ProviderConfig[] = []
+  const key = getNewsApiAiKey()
+  if (key) list.push({ type: 'newsapi-ai', key })
+  return list
+}
+
+export function getProvidersForWorld(): ProviderConfig[] {
+  const list: ProviderConfig[] = []
+  const key = getNewsApiAiKey()
+  if (key) list.push({ type: 'newsapi-ai', key })
+  return list
+}
+
+export function buildProviderRequest(
+  provider: ProviderConfig,
+  intent: 'top' | 'search',
+  opts: any
+): ProviderRequest | null {
+  if (provider.type === 'newsapi-ai') {
+    return buildNewsApiAiRequest(provider, intent, opts)
+  }
   return null
 }
 
 export async function tryProvidersSequential(
-  providers: Array<{ type: string; key: string }>,
+  providers: ProviderConfig[],
   intent: 'top' | 'search',
   opts: any,
-  fetcher: (url: string, headers: Record<string, string>) => Promise<any>
+  fetcher: (params: ProviderFetchParams) => Promise<any>
 ) {
   const errors: string[] = []
   const attempts: string[] = []
   const attemptsDetail: string[] = []
   const errorDetails: string[] = []
   if (!providers.length) {
-    const err: any = new Error('No providers configured (GNEWS_API missing)')
-    err.hint = 'Set GNEWS_API in your environment (Vercel env or local .env)'
+    const err: any = new Error('No providers configured (NEWSAPI_AI missing)')
+    err.hint = 'Set NEWSAPI_AI in your environment (Vercel env or local .env)'
     throw err
   }
-  // Use providers as supplied by getProviders*
-  let ordered = providers
+  const ordered = providers
   for (let i = 0; i < ordered.length; i++) {
     const p = ordered[i]
     attempts.push(p.type)
     try {
-      // Skip provider if cooling down (e.g., after 429)
       if (isCoolingDown(p.type)) {
         attemptsDetail.push(`${p.type}(cooldown)`)
         continue
       }
-      // Circuit breaker skip
       if (!breaker.allowRequest(p.type)) {
         attemptsDetail.push(`${p.type}(breaker-open)`)
         continue
       }
-      // Budget gating for GNews
-      if (p.type === 'gnews') {
-        const limit = getGnewsDailyLimit()
-        const cost = getGnewsCallCost()
-        const gate = canSpend('gnews', limit, cost)
+      if (p.type === 'newsapi-ai') {
+        const limit = getNewsApiAiDailyLimit()
+        const cost = getNewsApiAiCallCost()
+        const gate = canSpend('newsapi-ai', limit, cost)
         if (!gate.ok) {
-          attemptsDetail.push(`gnews(skipped:${gate.reason})`)
+          attemptsDetail.push(`newsapi-ai(skipped:${gate.reason})`)
           continue
         }
       }
+
       const variants: Array<{ label: string; o: any }> = []
       const pinQ = Boolean((opts as any)?.pinQ)
-      if (p.type === 'gnews') {
-        // GNews does not support domains/sources filters; keep it simple
-        variants.push({ label: 'as-is', o: { ...opts, domains: [], sources: [] } })
-        if (!pinQ)
-          variants.push({ label: 'no-q', o: { ...opts, q: undefined, domains: [], sources: [] } })
-        // Try without country to allow global coverage (useful for PK about scope)
+      variants.push({ label: 'as-is', o: { ...opts } })
+      if (!pinQ) variants.push({ label: 'no-q', o: { ...opts, q: undefined } })
+      variants.push({ label: 'no-country', o: { ...opts, country: undefined } })
+      if (!pinQ)
         variants.push({
-          label: 'no-country',
-          o: { ...opts, country: undefined, domains: [], sources: [] },
+          label: 'no-country-no-q',
+          o: { ...opts, country: undefined, q: undefined },
         })
-        if (!pinQ)
-          variants.push({
-            label: 'no-country-no-q',
-            o: { ...opts, country: undefined, q: undefined, domains: [], sources: [] },
-          })
-        variants.push({
-          label: 'topic-only',
-          o: { ...opts, q: undefined, domains: [], sources: [], page: 1 },
-        })
-      } else {
-        variants.push({ label: 'as-is', o: { ...opts } })
-      }
+      variants.push({ label: 'topic-only', o: { ...opts, q: undefined, page: 1 } })
 
       let lastAttemptUrl: string | undefined
       const runVariant = async (label: string, o: any) => {
@@ -171,12 +216,12 @@ export async function tryProvidersSequential(
         if (!req) throw new Error('Unsupported request for provider')
         lastAttemptUrl = req.url
         try {
-          const json = await fetcher(req.url, req.headers)
-          // spend budget for GNews on each outward call
-          if (p.type === 'gnews') {
-            spend('gnews', getGnewsCallCost())
+          const { pick, ...fetchParams } = req
+          const json = await fetcher(fetchParams)
+          if (p.type === 'newsapi-ai') {
+            spend('newsapi-ai', getNewsApiAiCallCost())
           }
-          let items = req.pick(json)
+          const items = pick(json)
           if (Array.isArray(items) && items.length) {
             recordSuccess(p.type, items.length)
             breaker.onSuccess(p.type)
@@ -191,10 +236,10 @@ export async function tryProvidersSequential(
           const status = err?.status || (msg.match(/\b(\d{3})\b/)?.[1] ?? '')
           breaker.onFailure(p.type, Number(status))
           if (String(status) === '422') {
-            attemptsDetail.push(`${p.type}:${label}(422)`) // try next variant
+            attemptsDetail.push(`${p.type}:${label}(422)`)
             return null
           }
-          attemptsDetail.push(`${p.type}:${label}(err)`) // record non-422 error
+          attemptsDetail.push(`${p.type}:${label}(err)`)
           errorDetails.push(`${p.type}:${label}: ${msg || 'error'}`)
           throw err
         }
@@ -204,7 +249,6 @@ export async function tryProvidersSequential(
         const res = await runVariant(v.label, v.o)
         if (res) return { ...res, attempts, attemptsDetail }
       }
-      // All variants returned empty – treat as a successful, empty response
       recordEmpty(p.type)
       attemptsDetail.push(`${p.type}(empty-all)`)
       return {
@@ -218,9 +262,8 @@ export async function tryProvidersSequential(
     } catch (e: any) {
       recordError(p.type, e?.message || String(e))
       if (!attemptsDetail[attemptsDetail.length - 1]?.startsWith(p.type + '(')) {
-        attemptsDetail.push(`${p.type}(err)`) // ensure a provider-level error marker exists
+        attemptsDetail.push(`${p.type}(err)`)
       }
-      // If upstream rate limited, set a short cooldown to avoid hammering
       const status = e?.status || (/\b(\d{3})\b/.exec(String(e?.message))?.[1] ?? '')
       if (String(status) === '429') {
         const retryAfter = parseInt(String(e?.retryAfter || ''), 10)

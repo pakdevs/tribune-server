@@ -96,13 +96,13 @@ async function handler(req: any, res: any) {
       }
     }
     res.setHeader('X-Cache', 'MISS')
-    // Use GNews-only providers
+    // Use NewsAPI.ai provider list
     const providers = getProvidersForWorld()
     const result = await tryProvidersSequential(
       providers,
       'top',
       { page: pageNum, pageSize: pageSizeNum, country, category, domains, sources },
-      (url, headers) => upstreamJson(url, headers)
+      (request: any) => upstreamJson(request)
     )
     const normalized = result.items.map(normalize).filter(Boolean)
     res.setHeader('X-Provider', result.provider)

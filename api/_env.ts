@@ -2,25 +2,25 @@
 // env vars are provided by the platform and this import is a no-op.
 import 'dotenv/config'
 
-// GNews API key (set GNEWS_API in Vercel env)
-export function getGnewsApiKey(): string | undefined {
-  const key = (process as any).env.GNEWS_API
+// NewsAPI.ai API key (set NEWSAPI_AI in Vercel env). Falls back to legacy GNEWS_API for compatibility.
+export function getNewsApiAiKey(): string | undefined {
+  const key = (process as any).env.NEWSAPI_AI || (process as any).env.GNEWS_API
   return key ? String(key) : undefined
 }
 
-// Daily request budget for GNews to preserve quota/costs
-export function getGnewsDailyLimit(): number {
-  const v = (process as any).env.GNEWS_DAILY_LIMIT
-  if (v === undefined) return 500
-  const n = Number(v)
+// Daily request budget for NewsAPI.ai to preserve quota/costs
+export function getNewsApiAiDailyLimit(): number {
+  const raw = (process as any).env.NEWSAPI_AI_DAILY_LIMIT ?? (process as any).env.GNEWS_DAILY_LIMIT
+  if (raw === undefined) return 500
+  const n = Number(raw)
   return Number.isFinite(n) ? n : 500
 }
 
-// Logical cost per GNews call
-export function getGnewsCallCost(): number {
-  const v = (process as any).env.GNEWS_CALL_COST
-  if (v === undefined) return 1
-  const n = Number(v)
+// Logical cost per NewsAPI.ai call
+export function getNewsApiAiCallCost(): number {
+  const raw = (process as any).env.NEWSAPI_AI_CALL_COST ?? (process as any).env.GNEWS_CALL_COST
+  if (raw === undefined) return 1
+  const n = Number(raw)
   return Number.isFinite(n) ? Math.max(1, Math.floor(n)) : 1
 }
 
