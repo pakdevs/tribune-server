@@ -1,6 +1,7 @@
 import { normalize } from '../../../lib/_normalize.js'
-import { PK_TERMS, buildPakistanOrQuery } from '../../../lib/pkTerms.js'
+import { PK_BUSINESS_CONCEPT_URIS, PK_TERMS, buildPakistanOrQuery } from '../../../lib/pkTerms.js'
 import { getPkAllowlistMeta, isHostInAllowlist } from '../../../lib/pkAllowlist.js'
+const PK_ALLOWLIST_ENABLED = String(process.env.FEATURE_PK_ALLOWLIST || '0') === '1'
 import { cors, cache, upstreamJson, addCacheDebugHeaders } from '../../../lib/_shared.js'
 import {
   getFresh,
@@ -55,12 +56,14 @@ async function handler(req: any, res: any) {
   const country = 'pk'
   // Load PK allowlist once per request (seed-only in this build)
   let allowlist: string[] = []
-  let allowlistSource = 'seed'
-  try {
-    const meta = await getPkAllowlistMeta()
-    allowlist = meta.list
-    allowlistSource = meta.source || 'seed'
-  } catch {}
+  let allowlistSource = PK_ALLOWLIST_ENABLED ? 'seed' : 'disabled'
+  if (PK_ALLOWLIST_ENABLED) {
+    try {
+      const meta = await getPkAllowlistMeta()
+      allowlist = meta.list
+      allowlistSource = meta.source || 'seed'
+    } catch {}
+  }
   try {
     const baseKeyParts = {
       category,
@@ -170,6 +173,7 @@ async function handler(req: any, res: any) {
           sources,
           q: aboutQuery,
           pinQ: true,
+          conceptUris: PK_BUSINESS_CONCEPT_URIS,
         },
         (request: any) => upstreamJson(request)
       ),
@@ -201,7 +205,7 @@ async function handler(req: any, res: any) {
         .replace(/^www\./, '')
       const tld = getTld(h)
       if (tld === 'pk') return 'PK'
-      if (isHostInAllowlist(h, allowlist)) return 'PK'
+      if (PK_ALLOWLIST_ENABLED && isHostInAllowlist(h, allowlist)) return 'PK'
       return undefined
     }
     function detectCountriesFromText(title = '', summary = ''): string[] {

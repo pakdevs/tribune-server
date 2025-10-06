@@ -18,20 +18,24 @@ import {
   attachEntityMeta,
 } from '../lib/_http.js'
 import { getDefaultPageSize, isPkSoft429Enabled } from '../lib/_env.js'
-import { PK_TERMS, buildPakistanOrQuery } from '../lib/pkTerms.js'
-import { getPkAllowlist, getPkAllowlistMeta, isHostInAllowlist } from '../lib/pkAllowlist.js'
+import { PK_BUSINESS_CONCEPT_URIS, PK_TERMS, buildPakistanOrQuery } from '../lib/pkTerms.js'
+import { getPkAllowlistMeta, isHostInAllowlist } from '../lib/pkAllowlist.js'
+
+const PK_ALLOWLIST_ENABLED = String(process.env.FEATURE_PK_ALLOWLIST || '0') === '1'
 
 export default async function handler(req: any, res: any) {
   cors(res)
   if (req.method === 'OPTIONS') return res.status(204).end()
   // Load PK allowlist (KV-backed) once per request; cached in-memory inside helper
   let allowlist: string[] = []
-  let allowlistSource = 'seed'
-  try {
-    const meta = await getPkAllowlistMeta()
-    allowlist = meta.list
-    allowlistSource = meta.source || 'seed'
-  } catch {}
+  let allowlistSource = PK_ALLOWLIST_ENABLED ? 'seed' : 'disabled'
+  if (PK_ALLOWLIST_ENABLED) {
+    try {
+      const meta = await getPkAllowlistMeta()
+      allowlist = meta.list
+      allowlistSource = meta.source || 'seed'
+    } catch {}
+  }
   // Minimal rate limiting: 60 req / 60s per IP
   try {
     const RL_ENABLED = String(process.env.RL_ENABLED || '1') === '1'
@@ -137,25 +141,84 @@ export default async function handler(req: any, res: any) {
         // Opportunistic background revalidation
         maybeScheduleRevalidate(cacheKey, async () => {
           const providers = getProvidersForPKTop()
-          const isAbout = scope === 'about'
-          const expandedAboutQ = isAbout ? `${buildPakistanOrQuery(8)}` : q
-          const enforcedQ = isAbout ? expandedAboutQ : q
-          const countryForCalls = isAbout ? undefined : country
-          const result2 = await tryProvidersSequential(
-            providers,
-            (scope === 'about' ? 'search' : 'top') as any,
-            {
-              page: pageNum,
-              pageSize: pageSizeNum,
-              country: countryForCalls,
-              domains,
-              sources,
-              q: enforcedQ,
-              pinQ: scope === 'from',
-              pageToken,
-            },
-            (request: any) => upstreamJson(request)
-          )
+          let result2: any
+          if (scope === 'mixed') {
+            const aboutQuery = q
+              ? `${q} ${buildPakistanOrQuery(8)}`.trim()
+              : buildPakistanOrQuery(8)
+            const [fromRes2, aboutRes2] = await Promise.all([
+              tryProvidersSequential(
+                providers,
+                'top' as any,
+                {
+                  page: pageNum,
+                  pageSize: pageSizeNum,
+                  country,
+                  domains,
+                  sources,
+                  q,
+                  pinQ: false,
+                  pageToken,
+                },
+                (request: any) => upstreamJson(request)
+              ),
+              tryProvidersSequential(
+                providers,
+                'search' as any,
+                {
+                  page: pageNum,
+                  pageSize: pageSizeNum,
+                  country: undefined,
+                  domains,
+                  sources,
+                  q: aboutQuery,
+                  pinQ: true,
+                  pageToken,
+                  conceptUris: PK_BUSINESS_CONCEPT_URIS,
+                },
+                (request: any) => upstreamJson(request)
+              ),
+            ])
+            const requestPairs: Array<[string, any]> = []
+            if (fromRes2?.request)
+              requestPairs.push(['from', { intent: 'top', ...fromRes2.request }])
+            if (aboutRes2?.request)
+              requestPairs.push(['about', { intent: 'search', ...aboutRes2.request }])
+            let requestMeta: any
+            if (requestPairs.length === 1) requestMeta = requestPairs[0][1]
+            else if (requestPairs.length > 1) requestMeta = Object.fromEntries(requestPairs)
+            result2 = {
+              items: [...(fromRes2?.items || []), ...(aboutRes2?.items || [])],
+              provider: fromRes2?.provider || aboutRes2?.provider || 'newsapi-ai',
+              url: [fromRes2?.url || '', aboutRes2?.url || ''].filter(Boolean).join(' || '),
+              request: requestMeta,
+              attempts: (fromRes2?.attempts || []).concat(aboutRes2?.attempts || []),
+              attemptsDetail: (fromRes2?.attemptsDetail || []).concat(
+                aboutRes2?.attemptsDetail || []
+              ),
+            }
+          } else {
+            const isAbout = scope === 'about'
+            const expandedAboutQ = isAbout ? `${buildPakistanOrQuery(8)}` : q
+            const enforcedQ = isAbout ? expandedAboutQ : q
+            const countryForCalls = isAbout ? undefined : country
+            result2 = await tryProvidersSequential(
+              providers,
+              (scope === 'about' ? 'search' : 'top') as any,
+              {
+                page: pageNum,
+                pageSize: pageSizeNum,
+                country: countryForCalls,
+                domains,
+                sources,
+                q: enforcedQ,
+                pinQ: scope === 'from',
+                pageToken,
+                conceptUris: scope === 'about' ? PK_BUSINESS_CONCEPT_URIS : undefined,
+              },
+              (request: any) => upstreamJson(request)
+            )
+          }
           let items2 = result2.items
           // Guarded fallback: legacy note for GNews has been retired (search intent used first)
           // Fallback no longer needed: about now uses search first
@@ -171,7 +234,7 @@ export default async function handler(req: any, res: any) {
               .replace(/^www\./, '')
             const tld = getTld(h)
             if (tld === 'pk') return 'PK'
-            if (isHostInAllowlist(h, allowlist)) return 'PK'
+            if (PK_ALLOWLIST_ENABLED && isHostInAllowlist(h, allowlist)) return 'PK'
             return undefined
           }
           function detectCountriesFromText(title = '', summary = ''): string[] {
@@ -249,20 +312,73 @@ export default async function handler(req: any, res: any) {
     res.setHeader('X-PK-Allowlist-Count', String(allowlist?.length || 0))
     // Use NewsAPI.ai provider list
     const providers = getProvidersForPKTop()
-    const flightKey = `pk:${country}:${String(pageNum)}:${String(pageSizeNum)}:pt:${
+    const flightKey = `pk:${scope}:${country}:${String(pageNum)}:${String(pageSizeNum)}:pt:${
       pageToken || ''
     }:d:${domains.join(',')}:s:${sources.join(',')}:q:${q}`
     let flight = getInFlight(flightKey)
     if (!flight) {
-      // Enforce country filter via provider country parameter when scope=from
-      const enforcedQ = q
-      const countryForCalls = scope === 'about' ? undefined : country
       flight = setInFlight(
         flightKey,
         (async () => {
+          if (scope === 'mixed') {
+            const aboutQuery = q
+              ? `${q} ${buildPakistanOrQuery(8)}`.trim()
+              : buildPakistanOrQuery(8)
+            const [fromRes, aboutRes] = await Promise.all([
+              tryProvidersSequential(
+                providers,
+                'top' as any,
+                {
+                  page: pageNum,
+                  pageSize: pageSizeNum,
+                  country,
+                  domains,
+                  sources,
+                  q,
+                  pinQ: false,
+                  pageToken,
+                },
+                (request: any) => upstreamJson(request)
+              ),
+              tryProvidersSequential(
+                providers,
+                'search' as any,
+                {
+                  page: pageNum,
+                  pageSize: pageSizeNum,
+                  country: undefined,
+                  domains,
+                  sources,
+                  q: aboutQuery,
+                  pinQ: true,
+                  pageToken,
+                  conceptUris: PK_BUSINESS_CONCEPT_URIS,
+                },
+                (request: any) => upstreamJson(request)
+              ),
+            ])
+            const requestPairs: Array<[string, any]> = []
+            if (fromRes?.request) requestPairs.push(['from', { intent: 'top', ...fromRes.request }])
+            if (aboutRes?.request)
+              requestPairs.push(['about', { intent: 'search', ...aboutRes.request }])
+            let requestMeta: any
+            if (requestPairs.length === 1) requestMeta = requestPairs[0][1]
+            else if (requestPairs.length > 1) requestMeta = Object.fromEntries(requestPairs)
+            return {
+              items: [...(fromRes?.items || []), ...(aboutRes?.items || [])],
+              provider: fromRes?.provider || aboutRes?.provider || 'newsapi-ai',
+              url: [fromRes?.url || '', aboutRes?.url || ''].filter(Boolean).join(' || '),
+              request: requestMeta,
+              attempts: (fromRes?.attempts || []).concat(aboutRes?.attempts || []),
+              attemptsDetail: (fromRes?.attemptsDetail || []).concat(
+                aboutRes?.attemptsDetail || []
+              ),
+            }
+          }
           const isAbout = scope === 'about'
+          const countryForCalls = isAbout ? undefined : country
           const aboutQ = isAbout ? buildPakistanOrQuery(8) : q
-          const primary = await tryProvidersSequential(
+          return tryProvidersSequential(
             providers,
             (isAbout ? 'search' : 'top') as any,
             {
@@ -271,14 +387,13 @@ export default async function handler(req: any, res: any) {
               country: countryForCalls,
               domains,
               sources,
-              q: isAbout ? aboutQ : enforcedQ,
+              q: isAbout ? aboutQ : q,
               pinQ: scope === 'from',
               pageToken,
+              conceptUris: isAbout ? PK_BUSINESS_CONCEPT_URIS : undefined,
             },
             (request: any) => upstreamJson(request)
           )
-          // No fallback needed: about uses search intent directly
-          return primary
         })()
       )
     }
@@ -298,7 +413,7 @@ export default async function handler(req: any, res: any) {
         .replace(/^www\./, '')
       const tld = getTld(h)
       if (tld === 'pk') return 'PK'
-      if (isHostInAllowlist(h, allowlist)) return 'PK'
+      if (PK_ALLOWLIST_ENABLED && isHostInAllowlist(h, allowlist)) return 'PK'
       return undefined
     }
     function detectCountriesFromText(title = '', summary = ''): string[] {
@@ -411,26 +526,49 @@ export default async function handler(req: any, res: any) {
     // Revalidate using canonical mixed key (always PK-scoped) to refresh the shared payload once
     maybeScheduleRevalidate(mixedKey, async () => {
       const providers = getProvidersForPKTop()
-      const enforcedQ = q
-      const countryForCalls = country // keep PK for canonical
-      const result2 = await tryProvidersSequential(
-        providers,
-        'top',
-        {
-          page: pageNum,
-          pageSize: pageSizeNum,
-          country: countryForCalls,
-          domains,
-          sources,
-          q: enforcedQ,
-          pinQ: false,
-          pageToken,
-        },
-        (request: any) => upstreamJson(request)
-      )
-      let items2 = result2.items
-      // Produce canonical (all) normalized list; consumers filter per-scope
-      let normalized2 = (items2 || []).map(normalize).filter(Boolean)
+      const aboutQuery = q ? `${q} ${buildPakistanOrQuery(8)}`.trim() : buildPakistanOrQuery(8)
+      const [fromRes2, aboutRes2] = await Promise.all([
+        tryProvidersSequential(
+          providers,
+          'top' as any,
+          {
+            page: pageNum,
+            pageSize: pageSizeNum,
+            country,
+            domains,
+            sources,
+            q,
+            pinQ: false,
+            pageToken,
+          },
+          (request: any) => upstreamJson(request)
+        ),
+        tryProvidersSequential(
+          providers,
+          'search' as any,
+          {
+            page: pageNum,
+            pageSize: pageSizeNum,
+            country: undefined,
+            domains,
+            sources,
+            q: aboutQuery,
+            pinQ: true,
+            pageToken,
+            conceptUris: PK_BUSINESS_CONCEPT_URIS,
+          },
+          (request: any) => upstreamJson(request)
+        ),
+      ])
+      const requestPairs: Array<[string, any]> = []
+      if (fromRes2?.request) requestPairs.push(['from', { intent: 'top', ...fromRes2.request }])
+      if (aboutRes2?.request)
+        requestPairs.push(['about', { intent: 'search', ...aboutRes2.request }])
+      let requestMeta: any
+      if (requestPairs.length === 1) requestMeta = requestPairs[0][1]
+      else if (requestPairs.length > 1) requestMeta = Object.fromEntries(requestPairs)
+      const combinedItems = [...(fromRes2?.items || []), ...(aboutRes2?.items || [])]
+      let normalized2 = combinedItems.map(normalize).filter(Boolean)
       function getTld(host = '') {
         const h = String(host || '').toLowerCase()
         const parts = h.split('.')
@@ -442,7 +580,7 @@ export default async function handler(req: any, res: any) {
           .replace(/^www\./, '')
         const tld = getTld(h)
         if (tld === 'pk') return 'PK'
-        if (isHostInAllowlist(h, allowlist)) return 'PK'
+        if (PK_ALLOWLIST_ENABLED && isHostInAllowlist(h, allowlist)) return 'PK'
         return undefined
       }
       function detectCountriesFromText(title = '', summary = ''): string[] {
@@ -472,8 +610,7 @@ export default async function handler(req: any, res: any) {
         const score = (it: any) => {
           const t = Date.parse(it.publishDate || it.publishedAt || '') || now
           const recency = 1 / Math.max(1, now - t)
-          const aboutBoost = scope === 'about' && it.isAboutPK && !it.isFromPK ? 1.1 : 1
-          return recency * aboutBoost
+          return recency
         }
         return items.slice().sort((a, b) => score(b) - score(a))
       }
@@ -496,29 +633,36 @@ export default async function handler(req: any, res: any) {
         const { dedupeByTitle } = await import('./_dedupe.js')
         normalized2 = dedupeByTitle(normalized2, 0.9)
       }
+      const provider = fromRes2?.provider || aboutRes2?.provider || 'newsapi-ai'
+      const url = [fromRes2?.url || '', aboutRes2?.url || ''].filter(Boolean).join(' || ')
+      const attempts = (fromRes2?.attempts || []).concat(aboutRes2?.attempts || [])
+      const attemptsDetail = (fromRes2?.attemptsDetail || []).concat(
+        aboutRes2?.attemptsDetail || []
+      )
       return {
         items: normalized2,
         meta: {
-          provider: result2.provider,
-          url: result2.url,
-          request: result2.request,
+          provider,
+          url,
+          request: requestMeta,
           cacheKey: mixedKey,
-          attempts: result2.attempts || [result2.provider],
-          attemptsDetail: result2.attemptsDetail,
+          attempts: attempts.length ? attempts : [provider],
+          attemptsDetail,
         },
       }
     })
     cache(res, 300, 60)
     const entityMeta = extractEntityMeta(scopedPayload)
-    if (String(req.query.debug) === '1') {
-      await addCacheDebugHeaders(res, req)
-      if (entityMeta) {
-        if (isNotModified(req, entityMeta)) {
-          applyEntityHeaders(res, entityMeta)
-          return res.status(304).end()
-        }
+    if (entityMeta) {
+      if (isNotModified(req, entityMeta)) {
         applyEntityHeaders(res, entityMeta)
+        await addCacheDebugHeaders(res, req)
+        return res.status(304).end()
       }
+      applyEntityHeaders(res, entityMeta)
+    }
+    await addCacheDebugHeaders(res, req)
+    if (String(req.query.debug) === '1') {
       const effectiveQ = q
       return res.status(200).json({
         items: normalized,
@@ -536,14 +680,6 @@ export default async function handler(req: any, res: any) {
           q: effectiveQ || null,
         },
       })
-    }
-    await addCacheDebugHeaders(res, req)
-    if (entityMeta) {
-      if (isNotModified(req, entityMeta)) {
-        applyEntityHeaders(res, entityMeta)
-        return res.status(304).end()
-      }
-      applyEntityHeaders(res, entityMeta)
     }
     return res.status(200).json({ items: normalized })
   } catch (e: any) {

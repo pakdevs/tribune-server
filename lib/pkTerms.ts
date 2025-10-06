@@ -45,6 +45,13 @@ export const PK_TERMS: string[] = [
   'pak govt',
 ]
 
+export const PK_BUSINESS_CONCEPT_URIS: string[] = [
+  'http://en.wikipedia.org/wiki/Business',
+  'http://en.wikipedia.org/wiki/Economy',
+  'http://en.wikipedia.org/wiki/Finance',
+  'http://en.wikipedia.org/wiki/Trade',
+]
+
 // Build an OR expression suitable for NewsAPI.ai article search payloads.
 // Examples:
 //   (pakistan OR pakistani OR islamabad)

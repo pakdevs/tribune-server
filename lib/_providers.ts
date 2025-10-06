@@ -192,6 +192,15 @@ function buildNewsApiAiRequest(
   const category: string | undefined = opts.category
     ? String(opts.category).toLowerCase()
     : undefined
+  const conceptUris: string[] = Array.isArray(opts.conceptUris)
+    ? Array.from(
+        new Set(
+          opts.conceptUris
+            .map((uri: any) => String(uri || '').trim())
+            .filter((uri: string) => Boolean(uri))
+        )
+      )
+    : []
 
   const queryClauses: any[] = []
   if (q) {
@@ -199,6 +208,11 @@ function buildNewsApiAiRequest(
   }
   if (category && CATEGORY_CONCEPT_MAP[category]) {
     queryClauses.push({ conceptUri: CATEGORY_CONCEPT_MAP[category] })
+  }
+  if (conceptUris.length === 1) {
+    queryClauses.push({ conceptUri: conceptUris[0] })
+  } else if (conceptUris.length > 1) {
+    queryClauses.push({ $or: conceptUris.map((uri) => ({ conceptUri: uri })) })
   }
   if (intent === 'top' && !q && countryUri) {
     queryClauses.push({ locationUri: countryUri })
@@ -228,8 +242,8 @@ function buildNewsApiAiRequest(
     articleBodyLen: -1,
     includeArticleTitle: true,
     includeArticleBasicInfo: true,
-    includeArticleBody: true,
-    includeArticleImage: true,
+    includeArticleBody: false,
+    includeArticleImage: false,
     includeArticleAuthors: true,
     includeArticleConcepts: false,
     includeArticleCategories: false,
@@ -311,8 +325,8 @@ export function buildNewsApiArticlesForTopicRequest(
     articleBodyLen: -1,
     includeArticleTitle: true,
     includeArticleBasicInfo: true,
-    includeArticleBody: opts.includeArticleBody !== false,
-    includeArticleImage: true,
+    includeArticleBody: opts.includeArticleBody === true,
+    includeArticleImage: false,
     includeArticleAuthors: true,
     dataType: opts.dataType || ['news'],
   }
