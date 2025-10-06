@@ -4,6 +4,7 @@ import { getFresh, getStale, setCache, getFreshOrL2 } from '../lib/_cache.js'
 import { maybeScheduleRevalidate } from '../lib/_revalidate.js'
 import { buildCacheKey } from '../lib/_key.js'
 import { getProvidersForWorld, tryProvidersSequential } from '../lib/_providers.js'
+import { resolveRegionFeed, buildProviderOptionsFromRegion } from '../lib/regions.js'
 // NewsAPI.ai provider
 import { getInFlight, setInFlight } from '../lib/_inflight.js'
 import {
@@ -43,10 +44,22 @@ export default async function handler(req: any, res: any) {
   } catch {}
   const rawPage = String(req.query.page || '1')
   const pageNum = Math.max(1, parseInt(rawPage, 10) || 1)
-  // Enforce shared page size (keep small to limit upstream bandwidth)
   const pageSizeNum = getDefaultPageSize()
-  let country = String(req.query.country || 'us').toLowerCase()
-  if (!/^[a-z]{2}$/i.test(country)) country = 'us'
+  const regionKey = String(req.query.region || 'world')
+  const feedKey = req.query.feed ? String(req.query.feed) : undefined
+  const localKey = req.query.local ? String(req.query.local) : undefined
+  let resolvedRegion: ReturnType<typeof resolveRegionFeed>
+  try {
+    resolvedRegion = resolveRegionFeed(regionKey, { feed: feedKey, local: localKey })
+  } catch (err: any) {
+    return res
+      .status(400)
+      .json({ error: err?.message || 'Invalid region', region: String(regionKey) })
+  }
+  let explicitCountry = req.query.country ? String(req.query.country).trim().toLowerCase() : ''
+  if (explicitCountry && !/^[a-z]{2}$/i.test(explicitCountry)) explicitCountry = ''
+  const effectiveCountry = explicitCountry || resolvedRegion.region.defaultCountry || undefined
+  const explicitLanguage = req.query.language ? String(req.query.language).trim().toLowerCase() : ''
   const pageToken = req.query.pageToken ? String(req.query.pageToken) : undefined
   // Optional filters to pass to providers and enforce locally
   const domains = String(req.query.domains || '')
@@ -57,16 +70,32 @@ export default async function handler(req: any, res: any) {
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean)
-  const q = String(req.query.q || '').trim()
+  const userQuery = String(req.query.q || '').trim()
+  const providerOverrides = {
+    page: pageNum,
+    pageSize: pageSizeNum,
+    country: effectiveCountry,
+    language: explicitLanguage || undefined,
+    q: userQuery || undefined,
+    domains: domains.length ? domains : undefined,
+    sources: sources.length ? sources : undefined,
+    pageToken,
+  }
+  const providerOpts = buildProviderOptionsFromRegion(resolvedRegion, providerOverrides)
+  const providerIntent = resolvedRegion.intent
   try {
     const cacheKey = buildCacheKey('world-top', {
-      country,
+      region: resolvedRegion.region.key,
+      feed: resolvedRegion.feedKey,
+      local: resolvedRegion.local?.key,
+      country: providerOpts.country,
+      language: providerOpts.language,
       page: pageNum,
       pageSize: pageSizeNum,
       pageToken,
       domains,
       sources,
-      q: q || undefined,
+      q: providerOpts.q,
     })
     const noCache = String(req.query.nocache || '0') === '1'
     if (!noCache) {
@@ -78,6 +107,9 @@ export default async function handler(req: any, res: any) {
         if (fresh.meta.attemptsDetail)
           res.setHeader('X-Provider-Attempts-Detail', fresh.meta.attemptsDetail.join(','))
         res.setHeader('X-Provider-Articles', String(fresh.items.length))
+        res.setHeader('X-Region-Key', resolvedRegion.region.key)
+        res.setHeader('X-Region-Feed', resolvedRegion.feedKey)
+        if (resolvedRegion.local) res.setHeader('X-Region-Local', resolvedRegion.local.key)
         if (!getFresh(cacheKey)) {
           res.setHeader('X-Cache-Tier', 'L2')
         } else {
@@ -98,10 +130,11 @@ export default async function handler(req: any, res: any) {
         // Opportunistic background revalidation if nearing expiry
         maybeScheduleRevalidate(cacheKey, async () => {
           const providers = getProvidersForWorld()
+          const revalidateOpts = buildProviderOptionsFromRegion(resolvedRegion, providerOverrides)
           const result = await tryProvidersSequential(
             providers,
-            'top',
-            { page: pageNum, pageSize: pageSizeNum, country, domains, sources, q, pageToken },
+            providerIntent,
+            revalidateOpts,
             (request: any) => upstreamJson(request)
           )
           let normalized = result.items.map(normalize).filter(Boolean)
@@ -126,6 +159,11 @@ export default async function handler(req: any, res: any) {
               provider: result.provider,
               attempts: result.attempts || [result.provider],
               attemptsDetail: result.attemptsDetail,
+              region: {
+                key: resolvedRegion.region.key,
+                feed: resolvedRegion.feedKey,
+                local: resolvedRegion.local?.key || null,
+              },
             },
           }
         })
@@ -134,18 +172,19 @@ export default async function handler(req: any, res: any) {
     }
     res.setHeader('X-Cache', 'MISS')
     const providers = getProvidersForWorld()
-    const flightKey = `world:${country}:${String(pageNum)}:${String(pageSizeNum)}:pt:${
-      pageToken || ''
-    }:d:${domains.join(',')}:s:${sources.join(',')}:q:${q}`
+    const flightKey = `world:${resolvedRegion.region.key}:${resolvedRegion.feedKey}:${
+      resolvedRegion.local?.key || ''
+    }:${String(pageNum)}:${String(pageSizeNum)}:pt:${pageToken || ''}:d:${domains.join(
+      ','
+    )}:s:${sources.join(',')}:q:${providerOpts.q || ''}:country:${
+      providerOpts.country || ''
+    }:lang:${providerOpts.language || ''}`
     let flight = getInFlight(flightKey)
     if (!flight) {
       flight = setInFlight(
         flightKey,
-        tryProvidersSequential(
-          providers,
-          'top',
-          { page: pageNum, pageSize: pageSizeNum, country, domains, sources, q, pageToken },
-          (request: any) => upstreamJson(request)
+        tryProvidersSequential(providers, providerIntent, providerOpts, (request: any) =>
+          upstreamJson(request)
         )
       )
     }
@@ -180,6 +219,9 @@ export default async function handler(req: any, res: any) {
     if (domains.length) res.setHeader('X-World-Domains', domains.join(','))
     if (sources.length) res.setHeader('X-World-Sources', sources.join(','))
     res.setHeader('X-Provider-Articles', String(normalized.length))
+    res.setHeader('X-Region-Key', resolvedRegion.region.key)
+    res.setHeader('X-Region-Feed', resolvedRegion.feedKey)
+    if (resolvedRegion.local) res.setHeader('X-Region-Local', resolvedRegion.local.key)
     // Usage header removed (single-provider)
     const cachePayload: any = {
       items: normalized,
@@ -190,16 +232,25 @@ export default async function handler(req: any, res: any) {
         cacheKey,
         attempts: result.attempts || [result.provider],
         attemptsDetail: result.attemptsDetail,
+        region: {
+          key: resolvedRegion.region.key,
+          feed: resolvedRegion.feedKey,
+          local: resolvedRegion.local?.key || null,
+          country: providerOpts.country || null,
+          language: providerOpts.language || null,
+          q: providerOpts.q || null,
+        },
       },
     }
     attachEntityMeta(cachePayload)
     setCache(cacheKey, cachePayload)
     maybeScheduleRevalidate(cacheKey, async () => {
       const providers2 = getProvidersForWorld()
+      const revalidateOpts2 = buildProviderOptionsFromRegion(resolvedRegion, providerOverrides)
       const result2 = await tryProvidersSequential(
         providers2,
-        'top',
-        { page: pageNum, pageSize: pageSizeNum, country, domains, sources, q, pageToken },
+        providerIntent,
+        revalidateOpts2,
         (request: any) => upstreamJson(request)
       )
       let normalized2 = result2.items.map(normalize).filter(Boolean)
@@ -227,6 +278,14 @@ export default async function handler(req: any, res: any) {
           cacheKey,
           attempts: result2.attempts || [result2.provider],
           attemptsDetail: result2.attemptsDetail,
+          region: {
+            key: resolvedRegion.region.key,
+            feed: resolvedRegion.feedKey,
+            local: resolvedRegion.local?.key || null,
+            country: providerOpts.country || null,
+            language: providerOpts.language || null,
+            q: providerOpts.q || null,
+          },
         },
       }
     })
@@ -252,10 +311,14 @@ export default async function handler(req: any, res: any) {
           errors: (result as any).errors,
           cacheKey,
           noCache,
-          country,
+          region: resolvedRegion.region.key,
+          feed: resolvedRegion.feedKey,
+          local: resolvedRegion.local?.key || null,
+          country: providerOpts.country || null,
+          language: providerOpts.language || null,
           domains,
           sources,
-          q: q || null,
+          q: providerOpts.q || null,
         },
       })
     }
@@ -269,19 +332,17 @@ export default async function handler(req: any, res: any) {
     }
     return res.status(200).json({ items: normalized })
   } catch (e: any) {
-    const country = String(req.query.country || 'us')
-    const rawPage = String(req.query.page || '1')
-    const rawPageSize = '100'
-    const pageSizeNum = Math.min(100, Math.max(1, parseInt(rawPageSize, 10) || 100))
-    const domains = String(req.query.domains || '')
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean)
     const cacheKey = buildCacheKey('world-top', {
-      country,
+      region: resolvedRegion.region.key,
+      feed: resolvedRegion.feedKey,
+      local: resolvedRegion.local?.key,
+      country: providerOpts?.country,
+      language: providerOpts?.language,
       page: pageNum,
       pageSize: pageSizeNum,
       domains,
+      sources,
+      q: providerOpts?.q,
     })
     const stale = getStale(cacheKey)
     if (stale) {
@@ -292,6 +353,9 @@ export default async function handler(req: any, res: any) {
       if (stale.meta.attemptsDetail)
         res.setHeader('X-Provider-Attempts-Detail', stale.meta.attemptsDetail.join(','))
       res.setHeader('X-Provider-Articles', String(stale.items.length))
+      res.setHeader('X-Region-Key', resolvedRegion.region.key)
+      res.setHeader('X-Region-Feed', resolvedRegion.feedKey)
+      if (resolvedRegion.local) res.setHeader('X-Region-Local', resolvedRegion.local.key)
       return res.status(200).json({ items: stale.items, stale: true })
     }
     const status = Number(e?.status || (/(\b\d{3}\b)/.exec(String(e?.message))?.[1] ?? '0'))

@@ -101,6 +101,16 @@ function mapCountryToLocationUri(country?: string) {
   return COUNTRY_TO_LOCATION_URI[normalized]
 }
 
+function toUniqueStringArray(value: any): string[] {
+  if (value === undefined || value === null) return []
+  const array = Array.isArray(value) ? value : [value]
+  const normalized = array
+    .map((entry) => String(entry ?? '').trim())
+    .filter((entry) => entry.length > 0)
+  if (!normalized.length) return []
+  return Array.from(new Set(normalized))
+}
+
 function stripUndefined(obj: Record<string, any>) {
   for (const key of Object.keys(obj)) {
     if (obj[key] === undefined) delete obj[key]
@@ -186,21 +196,26 @@ function buildNewsApiAiRequest(
 ): ProviderRequest {
   const page = clamp(parseInt(String(opts.page || '1'), 10) || 1, 1, 100000)
   const pageSize = clamp(parseInt(String(opts.pageSize || '10'), 10) || 10, 1, 100)
-  const language = normalizeLanguage(opts.language, 'eng')
+  const languageInput = Array.isArray(opts.language) ? opts.language[0] : opts.language
+  const language = normalizeLanguage(languageInput, 'eng')
   const countryUri = mapCountryToLocationUri(opts.country)
   const q: string | undefined = opts.q ? String(opts.q).trim() : undefined
   const category: string | undefined = opts.category
     ? String(opts.category).toLowerCase()
     : undefined
-  const conceptUris: string[] = Array.isArray(opts.conceptUris)
-    ? Array.from(
-        new Set(
-          opts.conceptUris
-            .map((uri: any) => String(uri || '').trim())
-            .filter((uri: string) => Boolean(uri))
-        )
-      )
-    : []
+  const conceptUris = toUniqueStringArray(opts.conceptUris)
+  const explicitLocationUris = toUniqueStringArray(opts.locationUris)
+  const sourceLocationUris = toUniqueStringArray(opts.sourceLocationUris)
+  const sourceLocationExclude = toUniqueStringArray(opts.sourceLocationExclude)
+  const dataTypeList = toUniqueStringArray(opts.dataType)
+  const forceWindowRaw = opts.forceMaxDataTimeWindow
+  const forceMaxDataTimeWindow = (() => {
+    if (forceWindowRaw === undefined || forceWindowRaw === null) return undefined
+    const numeric = Number(forceWindowRaw)
+    if (!Number.isFinite(numeric)) return undefined
+    if (numeric <= 0) return undefined
+    return numeric
+  })()
 
   const queryClauses: any[] = []
   if (q) {
@@ -214,8 +229,14 @@ function buildNewsApiAiRequest(
   } else if (conceptUris.length > 1) {
     queryClauses.push({ $or: conceptUris.map((uri) => ({ conceptUri: uri })) })
   }
-  if (intent === 'top' && !q && countryUri) {
-    queryClauses.push({ locationUri: countryUri })
+  const queryLocationUris = explicitLocationUris.slice()
+  if (intent === 'top' && !q && !queryLocationUris.length && countryUri) {
+    queryLocationUris.push(countryUri)
+  }
+  if (queryLocationUris.length === 1) {
+    queryClauses.push({ locationUri: queryLocationUris[0] })
+  } else if (queryLocationUris.length > 1) {
+    queryClauses.push({ $or: queryLocationUris.map((uri) => ({ locationUri: uri })) })
   }
   if (!queryClauses.length) {
     queryClauses.push({ keyword: 'news', keywordLoc: 'title' })
@@ -224,8 +245,21 @@ function buildNewsApiAiRequest(
   const filter: Record<string, any> = {
     lang: [language],
   }
-  if (countryUri) {
-    filter.sourceLocationUri = [countryUri]
+  const sourceInclude = sourceLocationUris.slice()
+  if (countryUri && !sourceInclude.length) {
+    sourceInclude.push(countryUri)
+  }
+  if (sourceInclude.length) {
+    filter.sourceLocationUri = sourceInclude
+  }
+  if (sourceLocationExclude.length) {
+    const filteredExcludes = sourceLocationExclude.filter((uri) => !sourceInclude.includes(uri))
+    if (filteredExcludes.length) {
+      filter.$not = {
+        ...(filter.$not || {}),
+        sourceLocationUri: filteredExcludes,
+      }
+    }
   }
 
   const sortBy = intent === 'top' ? 'sourceImportance' : 'date'
@@ -251,7 +285,8 @@ function buildNewsApiAiRequest(
     includeSourceTitle: true,
     includeSourceLocation: false,
     includeSourceRanking: false,
-    dataType: ['news'],
+    dataType: dataTypeList.length ? dataTypeList : ['news'],
+    forceMaxDataTimeWindow,
   }
 
   return buildArticlesEndpointRequest(provider, 'getArticles', body, pickArticles)
