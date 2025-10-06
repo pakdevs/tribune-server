@@ -12,6 +12,7 @@ import { buildCacheKey } from '../../../lib/_key.js'
 import { getProvidersForWorld, buildProviderRequest } from '../../../lib/_providers.js'
 import { getSourceDomains } from '../../../lib/_sourceDomains.js'
 import { getInFlight, setInFlight } from '../../../lib/_inflight.js'
+import { getDefaultPageSize } from '../../../lib/_env.js'
 
 const slugify = (s = '') =>
   String(s || '')
@@ -56,8 +57,8 @@ async function handler(req: any, res: any) {
     .filter(Boolean) as string[]
   const rawPage = String(req.query.page || '1')
   const pageNum = Math.max(1, parseInt(rawPage, 10) || 1)
-  // Fixed page size of 100
-  const pageSizeNum = 100
+  // Shared page size for NewsAPI-backed sources
+  const pageSizeNum = getDefaultPageSize()
   const from = req.query.from ? String(req.query.from) : undefined
   const to = req.query.to ? String(req.query.to) : undefined
   let country = String(req.query.country || 'us').toLowerCase()

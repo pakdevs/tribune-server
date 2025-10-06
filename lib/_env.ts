@@ -51,3 +51,18 @@ export function isPkSoft429Enabled(): boolean {
   const s = String(v).trim().toLowerCase()
   return s === '1' || s === 'true' || s === 'yes'
 }
+
+let cachedDefaultPageSize: number | undefined
+
+// Shared page size for NewsAPI-backed endpoints. Defaults to 10 to conserve bandwidth.
+export function getDefaultPageSize(): number {
+  if (cachedDefaultPageSize === undefined) {
+    const raw =
+      (process as any).env.TRIBUNE_DEFAULT_PAGE_SIZE ??
+      (process as any).env.TRIBUNE_PAGE_SIZE ??
+      (process as any).env.PAGE_SIZE
+    const n = raw !== undefined ? Number(raw) : NaN
+    cachedDefaultPageSize = Number.isFinite(n) ? Math.max(1, Math.floor(n)) : 10
+  }
+  return cachedDefaultPageSize
+}

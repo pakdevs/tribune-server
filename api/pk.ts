@@ -17,7 +17,7 @@ import {
   isNotModified,
   attachEntityMeta,
 } from '../lib/_http.js'
-import { isPkSoft429Enabled } from '../lib/_env.js'
+import { getDefaultPageSize, isPkSoft429Enabled } from '../lib/_env.js'
 import { PK_TERMS, buildPakistanOrQuery } from '../lib/pkTerms.js'
 import { getPkAllowlist, getPkAllowlistMeta, isHostInAllowlist } from '../lib/pkAllowlist.js'
 
@@ -59,8 +59,8 @@ export default async function handler(req: any, res: any) {
   } catch {}
   const rawPage = String(req.query.page || '1')
   const pageNum = Math.max(1, parseInt(rawPage, 10) || 1)
-  // Enforce fixed page size of 100 per request
-  const pageSizeNum = 100
+  // Enforce shared page size (keep small to limit upstream bandwidth)
+  const pageSizeNum = getDefaultPageSize()
   const country = 'pk'
   const scope = String(req.query.scope || 'mixed') // 'mixed' | 'from' | 'about'
   const pageToken = req.query.pageToken ? String(req.query.pageToken) : undefined

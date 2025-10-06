@@ -12,6 +12,7 @@ import {
   isNotModified,
   attachEntityMeta,
 } from '../lib/_http.js'
+import { getDefaultPageSize } from '../lib/_env.js'
 export default async function handler(req: any, res: any) {
   cors(res)
   if (req.method === 'OPTIONS') return res.status(204).end()
@@ -42,8 +43,8 @@ export default async function handler(req: any, res: any) {
   } catch {}
   const rawPage = String(req.query.page || '1')
   const pageNum = Math.max(1, parseInt(rawPage, 10) || 1)
-  // Enforce fixed page size of 100 per request
-  const pageSizeNum = 100
+  // Enforce shared page size (keep small to limit upstream bandwidth)
+  const pageSizeNum = getDefaultPageSize()
   let country = String(req.query.country || 'us').toLowerCase()
   if (!/^[a-z]{2}$/i.test(country)) country = 'us'
   const pageToken = req.query.pageToken ? String(req.query.pageToken) : undefined
